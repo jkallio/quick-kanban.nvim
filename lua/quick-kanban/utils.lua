@@ -3,7 +3,7 @@ local M = {}
 
 --- Initialize the plenary logger
 M.log = logger.new({
-    plugin = 'miniban',
+    plugin = 'quick-kanban',
     level = 'info',
 })
 
@@ -12,16 +12,26 @@ M.get_working_directory_path = function()
     return vim.fn.getcwd()
 end
 
+--- Check if directory exists
+--- @param path string The path to the directory
+M.directory_exists = function(path)
+    return vim.fn.isdirectory(path) == 1
+end
+
+--- Check if file exists
+--- @param path string The path to the file
+M.file_exists = function(path)
+    return vim.fn.filereadable(path) == 1
+end
+
 --- Creates a file in the given path if it doesn't exist
 --- @param path string The path to the file
 M.touch_file = function(path)
-    local file = io.open(path, 'r')
-    if file ~= nil then
-        file:close()
+    if M.file_exists(path) then
         return
     end
 
-    file = io.open(path, 'w')
+    local file = io.open(path, 'w')
     if file ~= nil then
         M.log.info('Created file: ' .. path)
         file:close()
@@ -33,7 +43,7 @@ end
 --- Create a directory in the given path if it doesn't exist
 --- @param path string The path to the directory
 M.touch_directory = function(path)
-    if vim.fn.isdirectory(path) == 1 then
+    if M.directory_exists(path) then
         return
     end
 
