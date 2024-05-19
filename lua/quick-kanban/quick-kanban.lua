@@ -6,6 +6,8 @@ local _state = {
     is_open = false,
     winids = {},
     bufnrs = {},
+    sel_window = nil,
+    sel_index = {},
 }
 
 local _opts = {
@@ -87,6 +89,7 @@ local find_window_key = function(wid)
             return key
         end
     end
+    utils.log.error('Failed to get the window key for window id: ' .. wid)
     return nil
 end
 
@@ -96,6 +99,7 @@ local find_window_index = function(key)
             return index
         end
     end
+    utils.log.error('Failed to get the window index for key: ' .. key)
     return -1
 end
 
@@ -158,8 +162,15 @@ M.open_ui = function()
         M.configure_buf_keymaps(_state.bufnrs[key])
 
         monitor_buf_close(_state.bufnrs[key])
+
+        -- If no window is selected, select the first window
+        if _state.sel_window == nil then
+            _state.sel_window = key
+            _state.sel_index[key] = 1
+        end
     end
 
+    M.set_window_focus(find_window_index(_state.sel_window))
     _state.is_open = true
 end
 
@@ -188,7 +199,11 @@ M.set_window_focus = function(index)
         return
     end
     vim.api.nvim_set_current_win(wid)
-    M.switch_item_focus(0)
+    _state.sel_window = win_key
+    if _state.sel_index[win_key] == nil then
+        _state.sel_index[win_key] = q
+    end
+    M.set_item_focus(_state.sel_index[win_key])
 end
 
 M.next_window = function()
@@ -206,6 +221,15 @@ M.prev_window = function()
 end
 
 M.switch_item_focus = function(idx_offset)
+    local cur_line = vim.fn.line('.')
+    if cur_line == 0 then
+        utils.log.error('Failed to get the current line')
+        return
+    end
+    M.set_item_focus(cur_line + idx_offset)
+end
+
+M.set_item_focus = function(idx)
     -- Clear all highlights
     for _, key in ipairs(_opts.windows) do
         local bufnr = _state.bufnrs[key]
@@ -216,16 +240,13 @@ M.switch_item_focus = function(idx_offset)
 
     local cur_win = vim.api.nvim_get_current_win()
     local cur_buf = vim.api.nvim_win_get_buf(cur_win)
-    local cur_line = vim.fn.line('.')
-    if cur_line == 0 then
-        utils.log.error('Failed to get the current line')
-        return
-    end
-    local next_line = vim.fn.max({ 1, vim.fn.min({ vim.fn.line('$'), (cur_line + idx_offset) }) })
+
+    local line_num = vim.fn.max({ 1, vim.fn.min({ vim.fn.line('$'), idx }) })
     -- vim.api.nvim_buf_add_highlight(cur_buf, -1, 'Normal', cur_line - 1, 0, -1)
     -- vim.api.nvim_buf_add_highlight(cur_buf, -1, 'Visual', next_line - 1, 0, -1)
     -- Move cursor
-    vim.api.nvim_win_set_cursor(cur_win, { next_line, 0 })
+    vim.api.nvim_win_set_cursor(cur_win, { line_num, 0 })
+    _state.sel_index[_state.sel_window] = line_num
 end
 
 M.next_item = function()

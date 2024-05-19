@@ -18,7 +18,6 @@ M.open_ui = function()
     end
     data.reload(qkb.get_directories())
     qkb.open_ui()
-    qkb.set_window_focus(1)
 end
 
 M.close_ui = function()
