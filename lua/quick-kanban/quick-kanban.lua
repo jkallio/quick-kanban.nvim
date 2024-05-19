@@ -1,4 +1,5 @@
 local utils = require('quick-kanban.utils')
+local data = require('quick-kanban.data')
 
 local M = {}
 local _state = {
@@ -46,6 +47,23 @@ M.create_directories = function()
     for _, win in ipairs(_opts.windows) do
         utils.touch_directory(_opts.path .. '/' .. win)
     end
+end
+
+M.get_directories = function()
+    local dirs = {}
+    for _, win in ipairs(_opts.windows) do
+        table.insert(dirs, { win_key = win, path = _opts.path .. '/' .. win })
+    end
+    return dirs
+end
+
+M.get_path_for_win_key = function(win_key)
+    for _, win in ipairs(_opts.windows) do
+        if win == win_key then
+            return _opts.path .. '/' .. win
+        end
+    end
+    return nil
 end
 
 M.configure_buf_keymaps = function(bufnr)
@@ -125,8 +143,9 @@ M.open_ui = function()
 
         _state.winids[key], _state.bufnrs[key] = utils.open_popup_window(key, size, pos)
 
-        vim.api.nvim_buf_set_lines(_state.bufnrs[key], 0, -1, false,
-            { 'TODO', 'Read', 'Contents', 'Of', 'Directory', key })
+        local items = data.get_items_for_window(key)
+
+        vim.api.nvim_buf_set_lines(_state.bufnrs[key], 0, -1, false, items)
 
         vim.api.nvim_buf_set_option(_state.bufnrs[key], 'buftype', 'nofile')
         vim.api.nvim_buf_set_option(_state.bufnrs[key], 'bufhidden', 'hide')
