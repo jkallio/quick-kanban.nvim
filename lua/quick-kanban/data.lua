@@ -26,7 +26,6 @@ end
 M.reload = function(directories)
     _items = {}
     for _, e in ipairs(directories) do
-        P(e)
         local items = read_items_from_directory(e.win_key, e.path)
         _items[e.win_key] = items
     end

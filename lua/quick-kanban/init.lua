@@ -1,5 +1,6 @@
 local qkb = require('quick-kanban.quick-kanban')
 local data = require('quick-kanban.data')
+local utils = require('quick-kanban.utils')
 
 local M = {}
 
@@ -46,6 +47,20 @@ end
 
 M.prev_item = function()
     qkb.switch_item_focus(-1)
+end
+
+M.add_item = function()
+    qkb.add_item()
+    data.reload(qkb.get_directories())
+    qkb.open_ui()
+end
+
+M.select_item = function()
+    local path = qkb.get_selected_item_path()
+    if path ~= nil then
+        qkb.close_ui()
+        vim.cmd('edit ' .. path)
+    end
 end
 
 return M

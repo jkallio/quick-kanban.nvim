@@ -18,11 +18,13 @@ local _opts = {
         'Done',
     },
     keymaps = {
+        add = 'a',
         close = 'q',
         next_window = 'l',
         prev_window = 'h',
         next_item = 'j',
         prev_item = 'k',
+        select_item = '<CR>',
     },
 }
 
@@ -68,8 +70,29 @@ M.get_path_for_win_key = function(win_key)
     return nil
 end
 
+local get_path_for_item = function(win_key, index)
+    local path = M.get_path_for_win_key(win_key)
+    if path == nil then
+        utils.log.error('Failed to get the path for window key: ' .. win_key)
+        return nil
+    end
+    local items = data.get_items_for_window(win_key)
+    local file_path = path .. '/' .. items[index]
+    if not utils.file_exists(file_path) then
+        utils.log.error('Failed to get the path for item: ' .. item)
+        return nil
+    end
+    return file_path
+end
+
+M.get_selected_item_path = function()
+    return get_path_for_item(_state.sel_window, _state.sel_index[_state.sel_window])
+end
+
 M.configure_buf_keymaps = function(bufnr)
     local opts = { noremap = true, silent = true }
+    vim.api.nvim_buf_set_keymap(bufnr, 'n', _opts.keymaps.add, ':lua require("quick-kanban").add_item()<CR>', opts)
+
     vim.api.nvim_buf_set_keymap(bufnr, 'n', _opts.keymaps.close, ':lua require("quick-kanban").close_ui()<CR>', opts)
     vim.api.nvim_buf_set_keymap(bufnr, 'n', _opts.keymaps.next_window, ':lua require("quick-kanban").next_window()<CR>',
         opts)
@@ -77,6 +100,9 @@ M.configure_buf_keymaps = function(bufnr)
         opts)
     vim.api.nvim_buf_set_keymap(bufnr, 'n', _opts.keymaps.next_item, ':lua require("quick-kanban").next_item()<CR>', opts)
     vim.api.nvim_buf_set_keymap(bufnr, 'n', _opts.keymaps.prev_item, ':lua require("quick-kanban").prev_item()<CR>', opts)
+
+    vim.api.nvim_buf_set_keymap(bufnr, 'n', _opts.keymaps.select_item, ':lua require("quick-kanban").select_item()<CR>',
+        opts)
 end
 
 M.is_open = function()
@@ -255,6 +281,21 @@ end
 
 M.prev_item = function()
     M.switch_item_focus(-1)
+end
+
+M.add_item = function()
+    local path = M.get_path_for_win_key(_state.sel_window)
+    if path == nil then
+        utils.log.error('Failed to get the path for window key: ' .. _state.sel_window)
+        return
+    end
+    local input = vim.fn.input('Add new Item: ')
+    if input == nil or input == '' then
+        return
+    end
+
+    local item_path = path .. '/' .. input .. '.md'
+    utils.touch_file(item_path)
 end
 
 return M
