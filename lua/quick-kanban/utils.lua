@@ -12,6 +12,13 @@ M.get_working_directory_path = function()
     return vim.fn.getcwd()
 end
 
+--- Concatenate the given paths
+--- @param ... string[] The paths to concatenate
+M.concat_paths = function(...)
+    local full_path = table.concat({ ... }, '/')
+    return vim.fn.resolve(full_path)
+end
+
 --- Check if directory exists
 --- @param path string The path to the directory
 M.directory_exists = function(path)
@@ -40,16 +47,30 @@ M.touch_file = function(path)
     M.log.error('Failed to touch file: ' .. path)
 end
 
---- Create a directory in the given path if it doesn't exist
---- @param path string The path to the directory
-M.touch_directory = function(path)
-    if M.directory_exists(path) then
+--- Move a file from one directory to another
+--- @param source string The source path of the file
+--- @param destination string The destination path of the file
+M.move_file = function(source, destination)
+    if not M.file_exists(source) then
+        M.log.error('Source file does not exist: ' .. source)
         return
     end
 
-    M.log.info('Creating directory: ' .. path)
-    if vim.fn.mkdir(path, 'p') == 0 then
-        M.log.error('Failed to create directory: ' .. path)
+    M.touch_directory(vim.fn.fnamemodify(destination, ':h'))
+    if vim.fn.rename(source, destination) ~= 0 then
+        M.log.error('Failed to move file: ' .. source .. ' -> ' .. destination)
+    end
+end
+
+--- Create a directory in the given path if it doesn't exist
+--- @param path string The path to the directory
+M.touch_directory = function(path)
+    if not M.directory_exists(path) then
+        if vim.fn.mkdir(path, 'p') == 0 then
+            M.log.error('Failed to create directory: ' .. path)
+            return
+        end
+        M.log.info('Directory created: ' .. path)
     end
 end
 
@@ -75,10 +96,43 @@ M.read_file_contents = function(path)
     return contents
 end
 
+--- Write given string to a file
+--- @param path string The path to the file
+--- @param content string The content to write to the file
+M.write_to_file = function(path, content)
+    if path == nil then
+        M.log.error('Invalid path: ' .. path)
+        return
+    end
+
+    local file = io.open(path, 'w')
+    if file == nil then
+        M.log.error('Failed to open file: ' .. path)
+        return
+    end
+
+    file:write(content)
+    file:close()
+end
+
+--- Delete the given file
+--- @param path string The path to the file
+M.delete_file = function(path)
+    if path == nil then
+        M.log.error('Invalid path: ' .. path)
+        return
+    end
+
+    if vim.fn.delete(path) ~= 0 then
+        M.log.error('Failed to delete file: ' .. path)
+        return
+    end
+end
+
 --- Write the given contents to a file
 --- @param path string The path to the file
 --- @param lines string[] The contents to write to the file
-M.write_file_contents = function(path, lines)
+M.write_lines_to_file = function(path, lines)
     if path == nil then
         M.log.error('Invalid path: ' .. path)
         return
@@ -145,7 +199,7 @@ M.open_popup_window = function(title, size, pos)
         col = pos.col,
         style = 'minimal',
         border = 'rounded',
-        title = '-=[ ' .. title .. ' ]=-',
+        title = title,
         title_pos = 'center',
     })
     return wid, bufnr
