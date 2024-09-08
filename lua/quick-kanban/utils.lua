@@ -13,7 +13,7 @@ M.get_working_directory_path = function()
 end
 
 --- Concatenate the given paths
---- @param ... string[] The paths to concatenate
+--- @param ... string The paths to concatenate
 M.concat_paths = function(...)
     local full_path = table.concat({ ... }, '/')
     return vim.fn.resolve(full_path)

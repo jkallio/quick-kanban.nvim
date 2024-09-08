@@ -31,13 +31,13 @@ M.toggle_ui = function()
 end
 
 --- Switch focus to the next category
-M.next_window = function()
-    qkb.next_window()
+M.next_category = function()
+    qkb.next_category()
 end
 
 --- Switch focus to the previous category
-M.prev_window = function()
-    qkb.prev_window()
+M.prev_category = function()
+    qkb.prev_category()
 end
 
 --- Switch focus to the next item in the current category

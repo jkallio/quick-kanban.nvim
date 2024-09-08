@@ -3,7 +3,7 @@ local utils = require('quick-kanban.utils')
 local M = {
     opts = {},
     items = {},
-    dirty = {},
+    items_dirty = {},
 }
 
 M.setup = function(opts)
@@ -21,7 +21,7 @@ end
 --- @return boolean
 M.has_unsaved_changes = function()
     for _, category in ipairs(M.opts.categories) do
-        if M.dirty[category] then
+        if M.items_dirty[category] then
             return true
         end
     end
@@ -42,13 +42,31 @@ M.move_item_to_category = function(item_id, from_category, to_category)
         if item.id == item_id then
             table.insert(M.items[to_category], 1, item)
             table.remove(M.items[from_category], i)
-            M.dirty[from_category] = true
-            M.dirty[to_category] = true
+            M.items_dirty[from_category] = true
+            M.items_dirty[to_category] = true
             return
         end
     end
 
     utils.log.error("Item not found: item_id=" .. item_id)
+end
+
+--- Move an item to a new position in the same category.
+--- @param item_id number The id of the item to move
+--- @param category string The category of the item
+--- @param new_position number The new position of the item
+--- @return boolean
+M.move_item_to_index = function(item_id, category, new_position)
+    for i, item in ipairs(M.items[category]) do
+        if item.id == item_id then
+            table.remove(M.items[category], i)
+            table.insert(M.items[category], new_position, item)
+            M.items_dirty[category] = true
+            return true
+        end
+    end
+    utils.log.error("Item not found: item_id=" .. item_id)
+    return false
 end
 
 --- Search for an item in all categories.
@@ -72,7 +90,7 @@ M.reload_files = function()
     M.items = {}
     for _, category in ipairs(M.opts.categories) do
         M.items[category] = {}
-        M.dirty[category] = false
+        M.items_dirty[category] = false
     end
 
     local files = vim.fn.readdir(M.opts.meta_path)
@@ -94,6 +112,13 @@ M.reload_files = function()
             utils.log.error("File not found: " .. full_file_path)
         end
     end
+
+    -- Reorder items based on the order field
+    for _, category in ipairs(M.opts.categories) do
+        table.sort(M.items[category], function(a, b)
+            return a.order < b.order
+        end)
+    end
 end
 
 --- Save changes in to the kanban files
@@ -104,7 +129,7 @@ M.save_to_file = function()
     end
 
     for _, category in ipairs(M.opts.categories) do
-        if M.dirty[category] then
+        if M.items_dirty[category] then
             for i, item in ipairs(M.items[category]) do
                 item.order = i
                 item.category = category
@@ -124,15 +149,15 @@ M.add_item = function(category, title)
         pos = #M.items[category] + 1
     end
 
+    -- TODO: Use a better id generation
     local new_item = {
         id = os.time(),
         title = title,
         category = category,
         order = pos
     }
-    print(pos .. " (" .. type(pos) .. ")")
     table.insert(M.items[category], pos, new_item)
-    M.dirty[category] = true
+    M.items_dirty[category] = true
 end
 
 --- Delete given item
