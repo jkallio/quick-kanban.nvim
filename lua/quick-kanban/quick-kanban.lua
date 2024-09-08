@@ -71,6 +71,8 @@ L.configure_buf_keymaps = function(bufnr, keymaps)
         opts)
     vim.api.nvim_buf_set_keymap(bufnr, 'n', keymaps.next_item, ':lua require("quick-kanban").next_item()<CR>', opts)
     vim.api.nvim_buf_set_keymap(bufnr, 'n', keymaps.prev_item, ':lua require("quick-kanban").prev_item()<CR>', opts)
+    vim.api.nvim_buf_set_keymap(bufnr, 'n', keymaps.open_item, ':lua require("quick-kanban").open_selected_item()<CR>',
+        opts)
     vim.api.nvim_buf_set_keymap(bufnr, 'n', keymaps.select_item, ':lua require("quick-kanban").select_item()<CR>', opts)
     vim.api.nvim_buf_set_keymap(bufnr, 'n', keymaps.refresh, ':lua require("quick-kanban").refresh()<CR>', opts)
     vim.api.nvim_buf_set_keymap(bufnr, 'n', keymaps.commit, ':lua require("quick-kanban").commit_changes()<CR>', opts)
@@ -366,7 +368,7 @@ end
 --- Refresh the kanban board data
 M.refresh = function()
     data.save_to_file()
-    data.reload_files()
+    data.reload_item_files()
     for _, category in ipairs(L.opts.categories) do
         L.reload_items_for_category(category)
     end
@@ -488,7 +490,24 @@ end
 
 --- Open the item under cursor
 M.open_selected_item = function()
-    utils.log.error("Not implemented")
+    local item_id = L.get_item_id_under_cursor()
+    if item_id == nil then
+        return
+    end
+
+    local item = data.get_item(item_id)
+    if item == nil then
+        return
+    end
+
+    if item.attachment_path == nil then
+        if not data.create_attachment(item) then
+            utils.log.error("Failed to create attachment for item: " .. item.id)
+            return
+        end
+    end
+
+    vim.cmd('new ' .. item.attachment_path)
 end
 
 --- Add a new item to the current category
