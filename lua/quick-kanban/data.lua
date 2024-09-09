@@ -16,16 +16,13 @@ local M = {
     --- Struct of parameters for the metadata of the kanban board
     --- @type table
     metadata = {},
-
-    --- Boolean indicating if the metadata has unsaved changes.
-    --- @type boolean
-    metadata_dirty = false,
 }
 
 --- Setup the data module with the specified options.
 --- @param opts table The configuration options
 M.setup = function(opts)
     M.opts = opts
+    M.reload_meta_file()
     M.reload_item_files()
 end
 
@@ -99,6 +96,33 @@ M.search_item_from_all_categories = function(search_id)
     return nil
 end
 
+--- Save the metadata to the metadata file
+M.save_metadata = function()
+    local path = utils.concat_paths(M.opts.path, ".metadata.json")
+    utils.write_to_file(path, vim.fn.json_encode(M.metadata))
+end
+
+--- Get the next item id and increment the counter
+--- @return number The next item id
+M.next_item_id = function()
+    M.metadata.id = M.metadata.id + 1
+    M.save_metadata()
+    return M.metadata.id
+end
+
+--- Reload the kanban metadata file
+M.reload_meta_file = function()
+    local path = utils.concat_paths(M.opts.path, ".metadata.json")
+    if not utils.file_exists(path) then
+        local meta_defaults = {
+            id = 0
+        }
+        utils.write_to_file(path, vim.fn.json_encode(meta_defaults))
+    end
+    local lines = utils.read_file_contents(path)
+    M.metadata = vim.fn.json_decode(lines)
+end
+
 --- Reload the data items from the files in the configured path.
 M.reload_item_files = function()
     if not utils.directory_exists(M.opts.path)
@@ -156,8 +180,16 @@ M.get_item = function(item_id)
     return nil
 end
 
---- Save changes in to the kanban files
-M.save_to_file = function()
+--- Save item changes into file
+--- @param item table
+M.save_item = function(item)
+    local file_path = utils.concat_paths(M.opts.meta_path, item.id)
+    utils.write_to_file(file_path, vim.fn.json_encode(item))
+end
+
+
+--- Save all unsaved item changes
+M.save_all_unsaved_item_changes = function()
     if not utils.directory_exists(M.opts.path) then
         debug("Kanban folder not found: Invalid configuration")
         return false
@@ -168,8 +200,7 @@ M.save_to_file = function()
             for i, item in ipairs(M.items[category]) do
                 item.order = i
                 item.category = category
-                local file_path = utils.concat_paths(M.opts.meta_path, item.id)
-                utils.write_to_file(file_path, vim.fn.json_encode(item))
+                M.save_item(item)
             end
         end
     end
@@ -206,6 +237,7 @@ M.create_attachment = function(item)
     item.attachment_path = attachment_path
 
     utils.write_to_file(item.attachment_path, "# " .. item.id .. ": " .. item.title)
+    M.save_item(item)
     return true
 end
 
@@ -218,9 +250,8 @@ M.add_item = function(category, title)
         pos = #M.items[category] + 1
     end
 
-    -- TODO: Use a better id generation
     local new_item = {
-        id = os.time(),
+        id = M.next_item_id(),
         title = title,
         category = category,
         order = pos,

@@ -99,20 +99,22 @@ end
 --- Write given string to a file
 --- @param path string The path to the file
 --- @param content string The content to write to the file
+--- @return boolean True if the file was written successfully, false otherwise
 M.write_to_file = function(path, content)
     if path == nil then
         M.log.error('Invalid path: ' .. path)
-        return
+        return false
     end
 
     local file = io.open(path, 'w')
     if file == nil then
         M.log.error('Failed to open file: ' .. path)
-        return
+        return false
     end
 
     file:write(content)
     file:close()
+    return true
 end
 
 --- Delete the given file

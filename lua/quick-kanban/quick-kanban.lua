@@ -367,8 +367,9 @@ end
 
 --- Refresh the kanban board data
 M.refresh = function()
-    data.save_to_file()
+    data.save_all_unsaved_item_changes()
     data.reload_item_files()
+
     for _, category in ipairs(L.opts.categories) do
         L.reload_items_for_category(category)
     end
@@ -543,7 +544,7 @@ M.commit_changes = function()
         end
     end
 
-    data.save_to_file()
+    data.save_all_unsaved_item_changes()
 end
 
 return M
