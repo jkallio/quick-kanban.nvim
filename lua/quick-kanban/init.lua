@@ -60,6 +60,11 @@ M.add_item = function()
     qkb.add_item()
 end
 
+--- Rename an item
+M.rename_item = function()
+    qkb.rename_item()
+end
+
 --- Delete selected item
 M.delete_item = function()
     qkb.delete_item()

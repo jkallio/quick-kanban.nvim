@@ -74,6 +74,7 @@ L.configure_buf_keymaps = function(bufnr, keymaps)
     vim.api.nvim_buf_set_keymap(bufnr, 'n', keymaps.open_item, ':lua require("quick-kanban").open_selected_item()<CR>',
         opts)
     vim.api.nvim_buf_set_keymap(bufnr, 'n', keymaps.select_item, ':lua require("quick-kanban").select_item()<CR>', opts)
+    vim.api.nvim_buf_set_keymap(bufnr, 'n', keymaps.rename, ':lua require("quick-kanban").rename_item()<CR>', opts)
     vim.api.nvim_buf_set_keymap(bufnr, 'n', keymaps.refresh, ':lua require("quick-kanban").refresh()<CR>', opts)
     vim.api.nvim_buf_set_keymap(bufnr, 'n', keymaps.commit, ':lua require("quick-kanban").commit_changes()<CR>', opts)
 end
@@ -520,6 +521,22 @@ M.add_item = function()
 
     data.add_item(L.opts.default_category, input)
     L.reload_items_for_category(L.opts.default_category)
+end
+
+--- Rename the current item
+M.rename_item = function()
+    local item_id = L.get_item_id_under_cursor()
+    local item = data.get_item(item_id or -1)
+    if item == nil then
+        return
+    end
+
+    local input = vim.fn.input({ prompt = 'New name for item [' .. item_id .. ']', default = item.title })
+    if input ~= nil and #input > 0 then
+        item.title = input
+        data.save_item(item)
+        L.reload_items_for_category(L.state.selected_category)
+    end
 end
 
 --- Delete selected item

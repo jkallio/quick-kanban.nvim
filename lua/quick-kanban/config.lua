@@ -47,6 +47,7 @@ local M = {
             prev_item = 'k',      -- Move to the previous item in the current category
             new_item = 'n',       -- Create a new item in the current category
             open_item = 'o',      -- Open the item under cursor
+            rename = 'r',         -- Rename the item under cursor
             refresh = 'R',        -- Refresh the kanban board
             commit = 'c',         -- Commit the changes in the Kanban board into file system
             select_item = '<CR>', -- Select the item under cursor

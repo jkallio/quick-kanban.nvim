@@ -259,6 +259,7 @@ M.add_item = function(category, title)
 
     }
     table.insert(M.items[category], pos, new_item)
+    M.save_item(new_item)
     M.items_dirty[category] = true
 end
 
