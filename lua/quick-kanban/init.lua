@@ -23,7 +23,7 @@ end
 
 --- Toggle the kanban board UI open/close
 M.toggle_ui = function()
-    if qkb.is_open() then
+    if qkb.state.is_open then
         M.close_ui()
     else
         M.open_ui()
@@ -50,14 +50,14 @@ M.prev_item = function()
     qkb.prev_item()
 end
 
---- Refresh the kanban board
-M.refresh = function()
-    qkb.refresh()
-end
-
 --- Add a new item to the current category
 M.add_item = function()
     qkb.add_item()
+end
+
+--- Archive the selected item
+M.archive_item = function()
+    qkb.archive_selected_item()
 end
 
 --- Rename an item
@@ -80,9 +80,9 @@ M.open_selected_item = function()
     qkb.open_selected_item()
 end
 
---- Commit unsaved changes
-M.commit_changes = function()
-    qkb.commit_changes()
+--- Toggle the visibility of the archive category
+M.toggle_archive = function()
+    qkb.toggle_archive()
 end
 
 return M
