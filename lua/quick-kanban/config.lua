@@ -31,6 +31,7 @@ local M = {
         --- The key mappings for interacting with the windows in the kanban board.
         --- @type table
         keymaps = {
+            show_help = '?',              -- Select the item under cursor
             quit = '<esc>',               -- Quit the kanban board
             toggle_archive = '<leader>B', -- Toggle the visibility of the archive category
             archive_item = 'd',           -- Archive the item under cursor
@@ -42,7 +43,7 @@ local M = {
             add_item = 'a',               -- Create a new item in the default category
             open_item = '<leader>o',      -- Open the item under cursor
             rename = '<leader>r',         -- Rename the item under cursor
-            select_item = '<CR>',         -- Select the item under cursor
+            select_item = '<cr>',         -- Select the item under cursor
         },
 
         --- The window configuration for the kanban board.
@@ -54,7 +55,7 @@ local M = {
 
             --- The height of the kanban board window.
             --- @type number
-            height = 20,
+            height = 30,
 
             --- Window title decoration (prefix and suffix)
             --- @type table
@@ -64,9 +65,13 @@ local M = {
             --- @type number
             blend = 5,
 
-            --- The gap between the kanban board windows
+            --- The gap between the kanban board windows (vertical)
             --- @type number
-            gap = 2,
+            vertical_gap = 1,
+
+            --- The gap between the kanban board windows (horizontal)
+            --- @type number
+            horizontal_gap = 2,
 
             --- Hide the cursor when the kanban board is opened.
             --- @type boolean
@@ -96,6 +101,10 @@ local M = {
         --- Wrap lines
         --- @type boolean
         wrap = true,
+
+        --- Show the preview window
+        --- @type boolean
+        show_preview = true,
     }
 }
 

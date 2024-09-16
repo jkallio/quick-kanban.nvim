@@ -85,4 +85,9 @@ M.toggle_archive = function()
     qkb.toggle_archive()
 end
 
+--- Display the help message
+M.show_help = function()
+    qkb.show_help()
+end
+
 return M

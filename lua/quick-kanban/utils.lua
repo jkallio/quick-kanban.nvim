@@ -76,16 +76,17 @@ end
 
 --- Read file contents into a table
 --- @param path string The path to the file
+--- @return string[] The contents of the file
 M.read_file_contents = function(path)
     if path == nil then
         M.log.error('Invalid path: ' .. path)
-        return nil
+        return {}
     end
 
     local file = io.open(path, 'r')
     if file == nil then
         M.log.error('Failed to open file: ' .. path)
-        return nil
+        return {}
     end
 
     local contents = {}
