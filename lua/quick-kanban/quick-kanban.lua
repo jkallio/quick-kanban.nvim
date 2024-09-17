@@ -284,36 +284,38 @@ M.show_cursor = function()
 end
 
 local get_help_text = function()
-    local function right_pad(str)
-        if #str <= 35 then
-            return str .. string.rep(" ", 35 - #str)
+    local function right_pad(str, len)
+        if #str <= len then
+            return str .. string.rep(" ", len - #str)
         else
             return str
         end
     end
 
-    local rows = vim.fn.floor(M.opts.window.height / 2) - 1
+    local rows = vim.fn.floor(M.opts.window.height / 2) - 3
     local items = {
-        "   Show Help       " .. M.opts.keymaps.show_help,
         "   Quit            " .. M.opts.keymaps.quit,
         "   Next Category   " .. M.opts.keymaps.next_category,
         "   Prev Category   " .. M.opts.keymaps.prev_category,
         "   Next Item       " .. M.opts.keymaps.next_item,
         "   Prev Item       " .. M.opts.keymaps.prev_item,
         "   Select Item     " .. M.opts.keymaps.select_item,
-        "   Open Item       " .. M.opts.keymaps.open_item,
+        "   Open Attachment " .. M.opts.keymaps.open_item,
         "   Rename Item     " .. M.opts.keymaps.rename,
         "   Add Item        " .. M.opts.keymaps.add_item,
+        "   Edit Item       " .. M.opts.keymaps.edit_item,
         "   Archive Item    " .. M.opts.keymaps.archive_item,
         "   Delete Item     " .. M.opts.keymaps.delete,
         "   Toggle Archive  " .. M.opts.keymaps.toggle_archive,
+        "   Toggle Preview  " .. M.opts.keymaps.toggle_preview,
+        "   Show Help       " .. M.opts.keymaps.show_help,
     }
 
     local lines = {}
     for i, item in ipairs(items) do
         local row = ((i - 1) % rows) + 1
         local line = lines[row] or ""
-        line = line .. right_pad(item)
+        line = line .. right_pad(item, rows > 10 and 35 or 30)
         lines[row] = line
     end
     return lines
@@ -473,6 +475,7 @@ M.open_ui = function()
         set_keymap(bufnr, M.opts.keymaps.show_help, ':lua require("quick-kanban").show_help()<CR>')
         set_keymap(bufnr, M.opts.keymaps.archive_item, ':lua require("quick-kanban").archive_item()<CR>')
         set_keymap(bufnr, M.opts.keymaps.toggle_archive, ':lua require("quick-kanban").toggle_archive()<CR>')
+        set_keymap(bufnr, M.opts.keymaps.toggle_preview, ':lua require("quick-kanban").toggle_preview()<CR>')
         set_keymap(bufnr, M.opts.keymaps.add_item, ':lua require("quick-kanban").add_item()<CR>')
         set_keymap(bufnr, M.opts.keymaps.delete, ':lua require("quick-kanban").delete_item()<CR>')
         set_keymap(bufnr, M.opts.keymaps.quit, ':lua require("quick-kanban").close_ui()<CR>')
@@ -511,7 +514,7 @@ M.open_ui = function()
         M.state.windows[PREVIEW_WIN_KEY].id = wid
         M.state.windows[PREVIEW_WIN_KEY].bufnr = bufnr
 
-        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, get_help_text())
+        vim.api.nvim_buf_set_lines(bufnr, 1, -1, false, get_help_text())
 
         -- Set the buffer options
         vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
@@ -550,12 +553,12 @@ M.close_ui = function()
     end
 
     for key, win in pairs(M.state.windows) do
-        if vim.api.nvim_win_is_valid(win.id) then
+        if vim.api.nvim_win_is_valid(win.id or -1) then
             vim.api.nvim_win_close(win.id, true)
         end
         M.state.windows[key].id = nil
 
-        if vim.api.nvim_buf_is_valid(win.bufnr) then
+        if vim.api.nvim_buf_is_valid(win.bufnr or -1) then
             vim.api.nvim_buf_delete(win.bufnr, { force = true })
         end
         M.state.windows[key].bufnr = nil
@@ -667,7 +670,7 @@ M.update_preview = function()
 
     local item = data.items[item_id]
     if item == nil or item.attachment_path == nil or not utils.file_exists(item.attachment_path) then
-        M.clear_preview()
+        vim.api.nvim_win_set_buf(M.state.windows[PREVIEW_WIN_KEY].id, vim.api.nvim_create_buf(false, true))
         return
     end
 
@@ -676,12 +679,38 @@ M.update_preview = function()
     vim.api.nvim_set_current_win(M.state.windows[M.state.selected_category].id)
 end
 
-M.clear_preview = function()
-    vim.api.nvim_win_set_buf(M.state.windows[PREVIEW_WIN_KEY].id, vim.api.nvim_create_buf(false, true))
+--- Show the help text in the preview window
+M.show_help = function()
+    if not M.opts.show_preview then
+        M.toggle_preview()
+    end
+    vim.api.nvim_win_set_buf(M.state.windows[PREVIEW_WIN_KEY].id, M.state.windows[PREVIEW_WIN_KEY].bufnr)
 end
 
-M.show_help = function()
-    vim.api.nvim_win_set_buf(M.state.windows[PREVIEW_WIN_KEY].id, M.state.windows[PREVIEW_WIN_KEY].bufnr)
+--- Toggle the visibility of the archive category
+--- TODO: Implement this function
+M.toggle_archive = function()
+    utils.log.error("Not implemented")
+end
+
+--- Toggle the visibility of the preview category
+--- TODO: Implement this function
+M.toggle_preview = function()
+    if M.opts.show_preview then
+        M.opts.show_preview = false
+        M.close_ui()
+        M.open_ui()
+    else
+        M.opts.show_preview = true
+        M.close_ui()
+        M.open_ui()
+    end
+end
+
+--- Edit the attachment of the selected item directly in the preview window
+--- TODO: Implement this function
+M.edit_item = function()
+    utils.log.error("Not implemented")
 end
 
 return M

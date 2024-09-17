@@ -85,9 +85,19 @@ M.toggle_archive = function()
     qkb.toggle_archive()
 end
 
+--- Toggle the visibility of the preview window
+M.toggle_preview = function()
+    qkb.toggle_preview()
+end
+
 --- Display the help message
 M.show_help = function()
     qkb.show_help()
+end
+
+--- Edit the attachment of the selected item
+M.edit_item = function()
+    qkb.edit_item()
 end
 
 return M

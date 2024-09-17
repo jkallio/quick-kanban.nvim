@@ -33,7 +33,8 @@ local M = {
         keymaps = {
             show_help = '?',              -- Select the item under cursor
             quit = '<esc>',               -- Quit the kanban board
-            toggle_archive = '<leader>B', -- Toggle the visibility of the archive category
+            toggle_archive = '<leader>a', -- Toggle the visibility of the archive category
+            toggle_preview = '<leader>p', -- Toggle the visibility of the archive category
             archive_item = 'd',           -- Archive the item under cursor
             delete = 'D',                 -- Delete the item under cursor
             next_category = 'l',          -- Move focus to the next category
@@ -41,8 +42,9 @@ local M = {
             next_item = 'j',              -- Move to the next item in the current category
             prev_item = 'k',              -- Move to the previous item in the current category
             add_item = 'a',               -- Create a new item in the default category
+            edit_item = 'e',              -- Edit the item attachment directly in the preview buffer
             open_item = '<leader>o',      -- Open the item under cursor
-            rename = '<leader>r',         -- Rename the item under cursor
+            rename = 'c',                 -- Rename the item under cursor
             select_item = '<cr>',         -- Select the item under cursor
         },
 
