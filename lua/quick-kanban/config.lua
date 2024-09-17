@@ -107,6 +107,9 @@ local M = {
         --- Show the preview window
         --- @type boolean
         show_preview = true,
+
+        --- Show the archive category
+        show_archive = true,
     }
 }
 

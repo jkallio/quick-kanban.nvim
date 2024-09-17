@@ -3,7 +3,8 @@ local data = require('quick-kanban.data')
 local WIN_HILIGHT_INACTIVE = 100
 local WIN_HILIGHT_ACTIVE = 101
 local WIN_HILIGHT_ITEM_SELECTED = 102
-local PREVIEW_WIN_KEY = "preview"
+local PREVIEW_KEY = "preview"
+local ARCHIVE_KEY = "archive"
 
 --- Public interface
 --- @type table
@@ -95,7 +96,7 @@ local reload_buffer_for_category = function(category)
         return
     end
 
-    local items = data.get_items_for_category_sorted(category)
+    local items = category == ARCHIVE_KEY and data.get_archived_items() or data.get_items_for_category_sorted(category)
     local buf_lines = {}
     for _, item in ipairs(items) do
         table.insert(buf_lines, " [" .. item.id .. "] " .. item.title)
@@ -408,11 +409,57 @@ M.open_ui = function()
         end
     end
 
+    --- Local helper function for setting buffer options for a category window
+    local function set_buffer_options(bufnr)
+        vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
+        vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
+        vim.api.nvim_set_option_value('modifiable', false, { buf = bufnr })
+    end
+
+    --- Local helper function for setting window options for a category window
+    local function set_window_options(wid, opts)
+        vim.api.nvim_set_option_value('relativenumber', false, { win = wid })
+        vim.api.nvim_set_option_value('cursorline', true, { win = wid })
+        vim.api.nvim_set_option_value('cursorlineopt', 'both', { win = wid })
+        vim.api.nvim_set_option_value('number', opts.number, { win = wid })
+        vim.api.nvim_set_option_value('winblend', opts.window.blend, { win = wid })
+        vim.api.nvim_set_option_value('wrap', opts.wrap, { win = wid })
+        vim.api.nvim_set_option_value('linebreak', opts.wrap, { win = wid })
+        vim.api.nvim_win_set_hl_ns(wid, WIN_HILIGHT_INACTIVE)
+    end
+
     -- Local helper function for configuring the keymaps for a buffer
     local function set_keymap(buf, key, cmd)
         if key ~= nil and cmd ~= nil then
             vim.api.nvim_buf_set_keymap(buf, 'n', key, cmd, { noremap = true, silent = true })
         end
+    end
+
+    --- Local helper function to disable default vim keys
+    local function disable_default_keys(bufnr)
+        local disabled_keys = { 'a', 'c', 'd', 'i', 'o', 'p', 'r', 'x', '<esc>', '<tab>', '<cr>', '<bs>', '<del>' }
+        for _, key in ipairs(disabled_keys) do
+            set_keymap(bufnr, string.lower(key), '<nop>')
+            set_keymap(bufnr, string.upper(key), '<nop>')
+        end
+    end
+
+    --- Local helper function for setting keymaps for a buffer
+    local function set_keymaps(bufnr, keymaps)
+        set_keymap(bufnr, keymaps.show_help, ':lua require("quick-kanban").show_help()<cr>')
+        set_keymap(bufnr, keymaps.archive_item, ':lua require("quick-kanban").archive_item()<cr>')
+        set_keymap(bufnr, keymaps.toggle_archive, ':lua require("quick-kanban").toggle_archive()<cr>')
+        set_keymap(bufnr, keymaps.toggle_preview, ':lua require("quick-kanban").toggle_preview()<cr>')
+        set_keymap(bufnr, keymaps.add_item, ':lua require("quick-kanban").add_item()<cr>')
+        set_keymap(bufnr, keymaps.delete, ':lua require("quick-kanban").delete_item()<cr>')
+        set_keymap(bufnr, keymaps.quit, ':lua require("quick-kanban").close_ui()<cr>')
+        set_keymap(bufnr, keymaps.next_category, ':lua require("quick-kanban").next_category()<cr>')
+        set_keymap(bufnr, keymaps.prev_category, ':lua require("quick-kanban").prev_category()<cr>')
+        set_keymap(bufnr, keymaps.next_item, ':lua require("quick-kanban").next_item()<cr>')
+        set_keymap(bufnr, keymaps.prev_item, ':lua require("quick-kanban").prev_item()<cr>')
+        set_keymap(bufnr, keymaps.open_item, ':lua require("quick-kanban").open_selected_item()<cr>')
+        set_keymap(bufnr, keymaps.select_item, ':lua require("quick-kanban").select_item()<cr>')
+        set_keymap(bufnr, keymaps.rename, ':lua require("quick-kanban").rename_item()<cr>')
     end
 
     if M.opts.window.hide_cursor then
@@ -435,84 +482,41 @@ M.open_ui = function()
             width = win_width,
             height = win_height
         }
-
         local win_pos = {
             col = win_pos_left + (i - 1) * (win_width + M.opts.window.horizontal_gap),
             row = M.opts.window.vertical_gap
         }
-
         local wid, bufnr = utils.open_popup_window(
             (M.opts.window.title_decoration[1] .. category .. M.opts.window.title_decoration[2]), win_size, win_pos)
 
         M.state.windows[category].id = wid
         M.state.windows[category].bufnr = bufnr
 
-        -- Set the buffer options
-        vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
-        vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
-        vim.api.nvim_set_option_value('modifiable', false, { buf = bufnr })
+        set_window_options(wid, M.opts)
+        set_buffer_options(bufnr)
+        disable_default_keys(bufnr)
+        set_keymaps(bufnr, M.opts.keymaps)
 
-        -- Set the window options
-        vim.api.nvim_set_option_value('relativenumber', false, { win = wid })
-        vim.api.nvim_set_option_value('cursorline', true, { win = wid })
-        vim.api.nvim_set_option_value('cursorlineopt', 'both', { win = wid })
-        vim.api.nvim_set_option_value('number', M.opts.number, { win = wid })
-        vim.api.nvim_set_option_value('winblend', M.opts.window.blend, { win = wid })
-        vim.api.nvim_set_option_value('wrap', M.opts.wrap, { win = wid })
-        vim.api.nvim_set_option_value('linebreak', M.opts.wrap, { win = wid })
-
-        -- On default, set the hilight to inactive
-        vim.api.nvim_win_set_hl_ns(wid, WIN_HILIGHT_INACTIVE)
-
-        -- Disable default keymaps for nonmodifable buffers
-        local disabled_keys = { 'a', 'c', 'd', 'i', 'o', 'p', 'r', 'x' }
-        for _, key in ipairs(disabled_keys) do
-            set_keymap(bufnr, string.lower(key), '<nop>')
-            set_keymap(bufnr, string.upper(key), '<nop>')
-        end
-
-        -- Configure the keymaps for the buffer
-        set_keymap(bufnr, M.opts.keymaps.show_help, ':lua require("quick-kanban").show_help()<CR>')
-        set_keymap(bufnr, M.opts.keymaps.archive_item, ':lua require("quick-kanban").archive_item()<CR>')
-        set_keymap(bufnr, M.opts.keymaps.toggle_archive, ':lua require("quick-kanban").toggle_archive()<CR>')
-        set_keymap(bufnr, M.opts.keymaps.toggle_preview, ':lua require("quick-kanban").toggle_preview()<CR>')
-        set_keymap(bufnr, M.opts.keymaps.add_item, ':lua require("quick-kanban").add_item()<CR>')
-        set_keymap(bufnr, M.opts.keymaps.delete, ':lua require("quick-kanban").delete_item()<CR>')
-        set_keymap(bufnr, M.opts.keymaps.quit, ':lua require("quick-kanban").close_ui()<CR>')
-        set_keymap(bufnr, M.opts.keymaps.next_category, ':lua require("quick-kanban").next_category()<CR>')
-        set_keymap(bufnr, M.opts.keymaps.prev_category, ':lua require("quick-kanban").prev_category()<CR>')
-        set_keymap(bufnr, M.opts.keymaps.next_item, ':lua require("quick-kanban").next_item()<CR>')
-        set_keymap(bufnr, M.opts.keymaps.prev_item, ':lua require("quick-kanban").prev_item()<CR>')
-        set_keymap(bufnr, M.opts.keymaps.open_item, ':lua require("quick-kanban").open_selected_item()<CR>')
-        set_keymap(bufnr, M.opts.keymaps.select_item, ':lua require("quick-kanban").select_item()<CR>')
-        set_keymap(bufnr, M.opts.keymaps.rename, ':lua require("quick-kanban").rename_item()<CR>')
-
-        -- Init the selected line number for the category
-        if M.state.windows[category].selected_line == nil then
-            M.state.windows[category].selected_line = 1
-        end
-
+        M.state.windows[category].selected_line = M.state.windows[category].selected_line or 1
         reload_buffer_for_category(category)
     end
 
     --- Create preview window
     if M.opts.show_preview then
-        local win_size = {
-            width = vim.fn.round(#M.opts.categories * win_width) +
-                (#M.opts.categories - 1) * M.opts.window.horizontal_gap,
-            height = win_height
-        }
+        local wid, bufnr = utils.open_popup_window("",
+            {
+                width = vim.fn.round(#M.opts.categories * win_width) +
+                    (#M.opts.categories - 1) * M.opts.window.horizontal_gap,
+                height = win_height
+            },
+            {
+                col = win_pos_left,
+                row = win_height + 1 + M.opts.window.vertical_gap * 2
+            })
 
-        local win_pos = {
-            col = win_pos_left,
-            row = win_height + 1 + M.opts.window.vertical_gap * 2
-        }
-
-        local wid, bufnr = utils.open_popup_window("", win_size, win_pos)
-
-        M.state.windows[PREVIEW_WIN_KEY] = {}
-        M.state.windows[PREVIEW_WIN_KEY].id = wid
-        M.state.windows[PREVIEW_WIN_KEY].bufnr = bufnr
+        M.state.windows[PREVIEW_KEY] = {}
+        M.state.windows[PREVIEW_KEY].id = wid
+        M.state.windows[PREVIEW_KEY].bufnr = bufnr
 
         vim.api.nvim_buf_set_lines(bufnr, 1, -1, false, get_help_text())
 
@@ -530,12 +534,35 @@ M.open_ui = function()
         -- On default, set the hilight to inactive
         vim.api.nvim_win_set_hl_ns(wid, WIN_HILIGHT_ACTIVE)
 
-        -- Disable default keymaps for nonmodifable buffers
-        local disabled_keys = { 'a', 'c', 'd', 'i', 'o', 'p', 'r', 'x' }
-        for _, key in ipairs(disabled_keys) do
-            set_keymap(bufnr, string.lower(key), '<nop>')
-            set_keymap(bufnr, string.upper(key), '<nop>')
-        end
+        --- Disable default keys for the preview window
+        disable_default_keys(bufnr)
+    end
+
+    --- Create the archive window
+    if M.opts.show_archive then
+        local wid, bufnr = utils.open_popup_window(
+            (M.opts.window.title_decoration[1] .. "Archive" .. M.opts.window.title_decoration[2]),
+            {
+                width = win_width,
+                height = win_height + (M.opts.show_preview and (win_height + M.opts.window.vertical_gap * 2) or 0)
+            },
+            {
+                col = win_pos_left + (#M.opts.categories) * (win_width + M.opts.window.horizontal_gap),
+                row = M.opts
+                    .window.vertical_gap
+            })
+
+        M.state.windows[ARCHIVE_KEY] = {}
+        M.state.windows[ARCHIVE_KEY].id = wid
+        M.state.windows[ARCHIVE_KEY].bufnr = bufnr
+
+        set_window_options(wid, M.opts)
+        set_buffer_options(bufnr)
+        disable_default_keys(bufnr)
+        set_keymaps(bufnr, M.opts.keymaps)
+
+        M.state.windows[ARCHIVE_KEY].selected_line = M.state.windows[ARCHIVE_KEY].selected_line or 1
+        reload_buffer_for_category(ARCHIVE_KEY)
     end
 
     M.set_category_focus(1)
@@ -634,8 +661,10 @@ M.archive_selected_item = function()
     if confirm then
         data.archive_item(item.id)
         reload_buffer_for_category(item.category)
+        reload_buffer_for_category(ARCHIVE_KEY)
         return true
     end
+
     return false
 end
 
@@ -652,6 +681,7 @@ M.delete_item = function()
     if confirm then
         data.delete_item(item.id)
         reload_buffer_for_category(item.category)
+        reload_buffer_for_category(ARCHIVE_KEY)
         return true
     end
     return false
@@ -670,11 +700,11 @@ M.update_preview = function()
 
     local item = data.items[item_id]
     if item == nil or item.attachment_path == nil or not utils.file_exists(item.attachment_path) then
-        vim.api.nvim_win_set_buf(M.state.windows[PREVIEW_WIN_KEY].id, vim.api.nvim_create_buf(false, true))
+        vim.api.nvim_win_set_buf(M.state.windows[PREVIEW_KEY].id, vim.api.nvim_create_buf(false, true))
         return
     end
 
-    vim.api.nvim_set_current_win(M.state.windows[PREVIEW_WIN_KEY].id)
+    vim.api.nvim_set_current_win(M.state.windows[PREVIEW_KEY].id)
     vim.cmd('edit ' .. item.attachment_path)
     vim.api.nvim_set_current_win(M.state.windows[M.state.selected_category].id)
 end
@@ -684,27 +714,21 @@ M.show_help = function()
     if not M.opts.show_preview then
         M.toggle_preview()
     end
-    vim.api.nvim_win_set_buf(M.state.windows[PREVIEW_WIN_KEY].id, M.state.windows[PREVIEW_WIN_KEY].bufnr)
+    vim.api.nvim_win_set_buf(M.state.windows[PREVIEW_KEY].id, M.state.windows[PREVIEW_KEY].bufnr)
 end
 
 --- Toggle the visibility of the archive category
---- TODO: Implement this function
 M.toggle_archive = function()
-    utils.log.error("Not implemented")
+    M.opts.show_archive = not M.opts.show_archive
+    M.close_ui()
+    M.open_ui()
 end
 
 --- Toggle the visibility of the preview category
---- TODO: Implement this function
 M.toggle_preview = function()
-    if M.opts.show_preview then
-        M.opts.show_preview = false
-        M.close_ui()
-        M.open_ui()
-    else
-        M.opts.show_preview = true
-        M.close_ui()
-        M.open_ui()
-    end
+    M.opts.show_preview = not M.opts.show_preview
+    M.close_ui()
+    M.open_ui()
 end
 
 --- Edit the attachment of the selected item directly in the preview window

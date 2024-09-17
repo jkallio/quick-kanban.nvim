@@ -36,6 +36,7 @@ end
 
 --- Get the items for the specified category.
 --- @param category string The name of the category
+--- @return table The items for the specified category sorted by order
 M.get_items_for_category_sorted = function(category)
     local items = {}
     for _, item in pairs(M.items) do
@@ -52,6 +53,25 @@ M.get_items_for_category_sorted = function(category)
         item.order = i
     end
 
+    return items
+end
+
+--- Get the archived items.
+M.get_archived_items = function()
+    local items = {}
+    local archive_path = utils.concat_paths(M.opts.path, M.opts.subdirectories.archive)
+    if utils.directory_exists(archive_path) then
+        local file_list = vim.fn.readdir(archive_path)
+        for _, file_name in ipairs(file_list) do
+            local file_path = utils.concat_paths(archive_path, file_name)
+            if utils.file_exists(file_path) then
+                local item = vim.fn.json_decode(utils.read_file_contents(file_path))
+                table.insert(items, item)
+            else
+                utils.log.error("File not found: " .. file_path)
+            end
+        end
+    end
     return items
 end
 
