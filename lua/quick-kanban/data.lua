@@ -57,6 +57,7 @@ M.get_items_for_category_sorted = function(category)
 end
 
 --- Get the archived items.
+--- @return table items The archived items
 M.get_archived_items = function()
     local items = {}
     local archive_path = utils.concat_paths(M.opts.path, M.opts.subdirectories.archive)
@@ -73,6 +74,19 @@ M.get_archived_items = function()
         end
     end
     return items
+end
+
+--- Get an archived item by id,
+--- @param item_id number The id of the item to get
+--- @return table? item The archived item or nil if the item was not found
+M.get_archived_item = function(item_id)
+    local items = M.get_archived_items()
+    for _, item in ipairs(items) do
+        if item.id == item_id then
+            return item
+        end
+    end
+    return nil
 end
 
 --- Move an item from one category to another.
@@ -226,11 +240,12 @@ end
 
 --- Archive given item
 --- @param item_id number The id of the item to archive
+--- @return table? item The archived item or nil if the item was not found
 M.archive_item = function(item_id)
     local item = M.items[item_id]
     if item == nil then
         utils.log.error("Failed to archive item: Item id [" .. item_id .. "] not found!")
-        return
+        return nil
     end
 
     item.is_archived = true
@@ -239,6 +254,26 @@ M.archive_item = function(item_id)
         utils.concat_paths(M.opts.path, M.opts.subdirectories.items, item.id),
         utils.concat_paths(M.opts.path, M.opts.subdirectories.archive, item.id)
     )
+    return item
+end
+
+--- Unarchive give item
+--- @param item_id number The id of the item to unarchive
+--- @return table? item The unarchived item or nil if the item was not found
+M.unarchive_item = function(item_id)
+    local items = M.get_archived_items()
+    for _, item in ipairs(items) do
+        if item.id == item_id then
+            item.is_archived = false
+            M.items[item_id] = item
+            utils.move_file(
+                utils.concat_paths(M.opts.path, M.opts.subdirectories.archive, item.id),
+                utils.concat_paths(M.opts.path, M.opts.subdirectories.items, item.id)
+            )
+            return item
+        end
+    end
+    return nil
 end
 
 --- Delete given item

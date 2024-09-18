@@ -60,6 +60,11 @@ M.archive_item = function()
     qkb.archive_selected_item()
 end
 
+--- Unarchive the selected item
+M.unarchive_item = function()
+    qkb.unarchive_selected_item()
+end
+
 --- Rename an item
 M.rename_item = function()
     qkb.rename_item()
@@ -67,7 +72,7 @@ end
 
 --- Delete selected item
 M.delete_item = function()
-    qkb.delete_item()
+    qkb.delete_selected_item()
 end
 
 -- Activate the selected item
@@ -76,23 +81,23 @@ M.select_item = function()
 end
 
 --- Open the selected item
-M.open_selected_item = function()
+M.open_item = function()
     qkb.open_selected_item()
 end
 
 --- Toggle the visibility of the archive category
-M.toggle_archive = function()
-    qkb.toggle_archive()
+M.toggle_archive_window = function()
+    qkb.toggle_archive_window()
 end
 
 --- Toggle the visibility of the preview window
-M.toggle_preview = function()
-    qkb.toggle_preview()
+M.toggle_preview_window = function()
+    qkb.toggle_preview_window()
 end
 
 --- Display the help message
-M.show_help = function()
-    qkb.show_help()
+M.show_help_text = function()
+    qkb.show_help_text()
 end
 
 --- Edit the attachment of the selected item

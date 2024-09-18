@@ -31,21 +31,22 @@ local M = {
         --- The key mappings for interacting with the windows in the kanban board.
         --- @type table
         keymaps = {
-            show_help = '?',              -- Select the item under cursor
             quit = '<esc>',               -- Quit the kanban board
             toggle_archive = '<leader>a', -- Toggle the visibility of the archive category
             toggle_preview = '<leader>p', -- Toggle the visibility of the archive category
-            archive_item = 'd',           -- Archive the item under cursor
-            delete = 'D',                 -- Delete the item under cursor
             next_category = 'l',          -- Move focus to the next category
             prev_category = 'h',          -- Move focus to the previous category
             next_item = 'j',              -- Move to the next item in the current category
             prev_item = 'k',              -- Move to the previous item in the current category
             add_item = 'a',               -- Create a new item in the default category
             edit_item = 'e',              -- Edit the item attachment directly in the preview buffer
+            archive_item = 'd',           -- Archive the item under cursor
+            unarchive_item = 'u',         -- Unarchive the item under cursor
+            delete = 'D',                 -- Delete the item under cursor
             open_item = '<leader>o',      -- Open the item under cursor
             rename = 'c',                 -- Rename the item under cursor
             select_item = '<cr>',         -- Select the item under cursor
+            show_help = '?',              -- Show the help text in the preview window
         },
 
         --- The window configuration for the kanban board.
@@ -87,13 +88,21 @@ local M = {
             --- @type string
             hilight_color = "#FFFF44",
 
+            --- Line background color
+            --- @type string
+            active_text_bg = "#448844",
+
             --- The color of the text of the currently active item.
             --- @type string
-            active_text_color = "#000000",
+            active_text_fg = "#000000",
+
+            --- The sellected text background
+            --- @type string
+            selected_text_bg = "#888844",
 
             --- The color of the text of the selected item.
             --- @type string
-            selected_text_color = "#000000",
+            selected_text_fg = "#000000",
         },
 
         --- Show line numbers
@@ -109,7 +118,8 @@ local M = {
         show_preview = true,
 
         --- Show the archive category
-        show_archive = true,
+        --- @type boolean
+        show_archive = false,
     }
 }
 
