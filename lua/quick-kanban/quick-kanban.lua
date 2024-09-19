@@ -279,41 +279,48 @@ M.show_cursor = function()
     end
 end
 
-local get_help_text = function()
-    local function right_pad(str, len)
-        if #str <= len then
-            return str .. string.rep(" ", len - #str)
-        else
-            return str
+--- Returns
+local get_help_text_lines = function(keymaps)
+    local lines = {}
+    local center = (M.opts.window.width * #M.opts.categories) / 2
+
+    -- Collect all the keymaps from the table and format them
+    local items = {}
+    local rows = vim.fn.floor(M.opts.window.height / 2) - 7
+    for _, keymap in pairs(keymaps) do
+        if keymap.keys == nil or keymap.desc == nil then
+            utils.log.warn("Invalid keymap: " .. vim.inspect(keymap))
+            return lines
         end
+
+        local key = keymap.keys
+        if type(key) == "table" then
+            key = key[1]
+        end
+
+        local help = utils.right_pad(keymap.desc, 20) .. key
+        table.insert(items, help)
     end
 
-    local rows = vim.fn.floor(M.opts.window.height / 2) - 3
-    local items = {
-        "   Quit            " .. M.opts.keymaps.quit,
-        "   Next Category   " .. M.opts.keymaps.next_category,
-        "   Prev Category   " .. M.opts.keymaps.prev_category,
-        "   Next Item       " .. M.opts.keymaps.next_item,
-        "   Prev Item       " .. M.opts.keymaps.prev_item,
-        "   Select Item     " .. M.opts.keymaps.select_item,
-        "   Open Attachment " .. M.opts.keymaps.open_item,
-        "   Rename Item     " .. M.opts.keymaps.rename,
-        "   Add Item        " .. M.opts.keymaps.add_item,
-        "   Edit Item       " .. M.opts.keymaps.edit_item,
-        "   Archive Item    " .. M.opts.keymaps.archive_item,
-        "   Delete Item     " .. M.opts.keymaps.delete,
-        "   Toggle Archive  " .. M.opts.keymaps.toggle_archive,
-        "   Toggle Preview  " .. M.opts.keymaps.toggle_preview,
-        "   Show Help       " .. M.opts.keymaps.show_help,
-    }
-
-    local lines = {}
     for i, item in ipairs(items) do
         local row = ((i - 1) % rows) + 1
         local line = lines[row] or ""
-        line = line .. right_pad(item, rows > 10 and 35 or 30)
+        line = utils.trim_left(line)
+        line = line .. utils.right_pad(item, 35)
+        line = utils.left_pad(line, center + #line / 2)
         lines[row] = line
     end
+
+    local title = "Quick Kanban Help"
+    title = utils.left_pad(title, center + #title / 2)
+
+    table.insert(lines, 1, title)
+    table.insert(lines, 2, "")
+    table.insert(lines, "")
+
+    local copyright = "(c) 2024 Jussi Kallio"
+    copyright = utils.left_pad(copyright, center + #copyright / 2)
+    table.insert(lines, copyright)
     return lines
 end
 
@@ -423,6 +430,7 @@ M.open_ui = function()
     end
 
     --- Local helper function for setting buffer options for a category window
+    --- @param bufnr number The buffer number
     local function set_buffer_options(bufnr)
         vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
         vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
@@ -430,6 +438,8 @@ M.open_ui = function()
     end
 
     --- Local helper function for setting window options for a category window
+    --- @param wid number The window id
+    --- @param opts table The options for the window
     local function set_window_options(wid, opts)
         vim.api.nvim_set_option_value('relativenumber', false, { win = wid })
         vim.api.nvim_set_option_value('cursorline', true, { win = wid })
@@ -442,9 +452,21 @@ M.open_ui = function()
     end
 
     -- Local helper function for configuring the keymaps for a buffer
-    local function set_keymap(buf, key, cmd)
-        if key ~= nil and cmd ~= nil then
-            vim.api.nvim_buf_set_keymap(buf, 'n', key, cmd, { noremap = true, silent = true })
+    local function set_keymap(bufnr, keymap, cmd)
+        if bufnr == nil or cmd == nil or keymap == nil then
+            utils.log.error("Invalid args!")
+            return
+        end
+        if type(keymap) == "string" then
+            vim.api.nvim_buf_set_keymap(bufnr, 'n', keymap, cmd, { noremap = true, silent = true })
+        elseif type(keymap) == "table" then
+            if type(keymap.keys) == "string" then
+                set_keymap(bufnr, keymap.keys, cmd)
+            else
+                for _, k in ipairs(keymap.keys) do
+                    vim.api.nvim_buf_set_keymap(bufnr, 'n', k, cmd, { noremap = true, silent = true })
+                end
+            end
         end
     end
 
@@ -533,7 +555,9 @@ M.open_ui = function()
         M.state.windows[PREVIEW_KEY].id = wid
         M.state.windows[PREVIEW_KEY].bufnr = bufnr
 
-        vim.api.nvim_buf_set_lines(bufnr, 1, -1, false, get_help_text())
+        -- Create a help text buffer for the default preview window
+        local help_text = get_help_text_lines(M.opts.keymaps)
+        vim.api.nvim_buf_set_lines(bufnr, 1, -1, false, help_text)
 
         -- Set the buffer options
         vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })

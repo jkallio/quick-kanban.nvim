@@ -208,4 +208,39 @@ M.open_popup_window = function(title, size, pos)
     return wid, bufnr
 end
 
+--- Pad string to the right with spaces to the given length
+--- @param str string The string to pad
+--- @param len number The length to pad the string to
+M.right_pad = function(str, len)
+    if #str <= len then
+        return str .. string.rep(" ", len - #str)
+    else
+        return str
+    end
+end
+
+-- Pad string to the left with spaces to the given length
+-- @param str string The string to pad
+-- @param len number The length to pad the string to
+M.left_pad = function(str, len)
+    if #str <= len then
+        return string.rep(" ", len - #str) .. str
+    else
+        return str
+    end
+end
+
+--- Trim whitespace from the beginning of the given string
+--- @param str string The string to trim
+M.trim_left = function(str)
+    return string.match(str, "^%s*(.-)$")
+end
+
+--- Trim whitespace from the beginning and end of the given string
+--- @param str string The string to trim
+--- @return string The trimmed string
+M.trim = function(str)
+    return str:match("^%s*(.-)%s*$") or ""
+end
+
 return M

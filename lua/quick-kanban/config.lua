@@ -31,22 +31,22 @@ local M = {
         --- The key mappings for interacting with the windows in the kanban board.
         --- @type table
         keymaps = {
-            quit = '<esc>',               -- Quit the kanban board
-            toggle_archive = '<leader>a', -- Toggle the visibility of the archive category
-            toggle_preview = '<leader>p', -- Toggle the visibility of the archive category
-            next_category = 'l',          -- Move focus to the next category
-            prev_category = 'h',          -- Move focus to the previous category
-            next_item = 'j',              -- Move to the next item in the current category
-            prev_item = 'k',              -- Move to the previous item in the current category
-            add_item = 'a',               -- Create a new item in the default category
-            edit_item = 'e',              -- Edit the item attachment directly in the preview buffer
-            archive_item = 'd',           -- Archive the item under cursor
-            unarchive_item = 'u',         -- Unarchive the item under cursor
-            delete = 'D',                 -- Delete the item under cursor
-            open_item = '<leader>o',      -- Open the item under cursor
-            rename = 'c',                 -- Rename the item under cursor
-            select_item = '<cr>',         -- Select the item under cursor
-            show_help = '?',              -- Show the help text in the preview window
+            show_help = { keys = '?', desc = "Show help" },
+            next_category = { keys = 'l', desc = "Next category" },
+            prev_category = { keys = 'h', desc = "Prev category" },
+            next_item = { keys = 'j', desc = "Next item" },
+            prev_item = { keys = 'k', desc = "Prev item" },
+            add_item = { keys = 'a', desc = "Add new item" },
+            edit_item = { keys = 'e', desc = "Edit attachment" },
+            archive_item = { keys = 'd', desc = "Archvie item" },
+            unarchive_item = { keys = 'u', desc = "Unarchive item" },
+            delete = { keys = 'D', desc = "Delete item" },
+            open_item = { keys = '<leader>o', desc = "Open item" },
+            rename = { keys = { 'r', 'c' }, desc = "Rename item title" },
+            select_item = { keys = '<cr>', desc = "Select item" },
+            toggle_archive = { keys = '<leader>a', desc = "Toggle Archive" },
+            toggle_preview = { keys = '<leader>p', desc = "Toggle Preview" },
+            quit = { keys = { 'q', '<esc>' }, desc = "Quit" },
         },
 
         --- The window configuration for the kanban board.
