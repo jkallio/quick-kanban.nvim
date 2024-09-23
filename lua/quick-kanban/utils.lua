@@ -211,9 +211,11 @@ end
 --- Pad string to the right with spaces to the given length
 --- @param str string The string to pad
 --- @param len number The length to pad the string to
-M.right_pad = function(str, len)
+--- @param char string? The character to pad the string with
+M.right_pad = function(str, len, char)
+    char = char or ' '
     if #str <= len then
-        return str .. string.rep(" ", len - #str)
+        return str .. string.rep(char, len - #str)
     else
         return str
     end
@@ -241,6 +243,31 @@ end
 --- @return string The trimmed string
 M.trim = function(str)
     return str:match("^%s*(.-)%s*$") or ""
+end
+
+
+--- Configure the keymaps for the given buffer. The keymaps can be either...
+--- - A single keymap string (e.g. '<leader>q')
+--- - A table of keymaps (e.g. { keys = {'<esc>', '<leader>q'}, desc = 'Quit' })
+--- @param bufnr number The buffer number
+--- @param keymap string|table The keymaps to configure
+--- @param cmd string The command to execute
+M.set_keymap = function(bufnr, keymap, cmd)
+    if bufnr == nil or cmd == nil or keymap == nil then
+        utils.log.error("Invalid args!")
+        return
+    end
+    if type(keymap) == "string" then
+        vim.api.nvim_buf_set_keymap(bufnr, 'n', keymap, cmd, { noremap = true, silent = true })
+    elseif type(keymap) == "table" then
+        if type(keymap.keys) == "string" then
+            M.set_keymap(bufnr, keymap.keys, cmd)
+        else
+            for _, k in ipairs(keymap.keys) do
+                vim.api.nvim_buf_set_keymap(bufnr, 'n', k, cmd, { noremap = true, silent = true, desc = keymap.desc })
+            end
+        end
+    end
 end
 
 return M

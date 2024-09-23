@@ -38,6 +38,7 @@ local M = {
             prev_item = { keys = 'k', desc = "Prev item" },
             add_item = { keys = 'a', desc = "Add new item" },
             edit_item = { keys = 'e', desc = "Edit attachment" },
+            end_editing = { keys = '<esc><esc>', desc = "End editing" },
             archive_item = { keys = 'd', desc = "Archvie item" },
             unarchive_item = { keys = 'u', desc = "Unarchive item" },
             delete = { keys = 'D', desc = "Delete item" },
@@ -58,7 +59,7 @@ local M = {
 
             --- The height of the kanban board window.
             --- @type number
-            height = 30,
+            height = 40,
 
             --- Window title decoration (prefix and suffix)
             --- @type table

@@ -76,17 +76,20 @@ M.get_archived_items = function()
     return items
 end
 
---- Get an archived item by id,
+--- Get item by id (including archived items).
 --- @param item_id number The id of the item to get
---- @return table? item The archived item or nil if the item was not found
-M.get_archived_item = function(item_id)
-    local items = M.get_archived_items()
-    for _, item in ipairs(items) do
-        if item.id == item_id then
-            return item
+--- @return table? item The item or nil if the item was not found
+M.get_item = function(item_id)
+    local item = M.items[item_id]
+    if item == nil then
+        local items = M.get_archived_items()
+        for _, archived_item in ipairs(items) do
+            if archived_item.id == item_id then
+                return archived_item
+            end
         end
     end
-    return nil
+    return item
 end
 
 --- Move an item from one category to another.
@@ -196,7 +199,7 @@ M.save_item = function(item)
     utils.write_to_file(file_path, vim.fn.json_encode(item))
 end
 
---- Create an attachment for the specified item.
+--- Create a markdown attachment file for the specified item.
 --- @param item table The item to create the attachment for
 --- @return boolean True if the attachment was created successfully, false otherwise
 M.create_attachment = function(item)
@@ -205,14 +208,15 @@ M.create_attachment = function(item)
         return false
     end
 
-    if item.attachment_path ~= nil and utils.file_exists(item.attachment_path) then
-        utils.log.error("Item already has an attachment")
-        return false
+    if item.attachment_path ~= nil then
+        utils.log.error("Item already has an attachment: " .. item.attachment_path)
+        return false;
     end
-
     item.attachment_path = utils.concat_paths(M.opts.path, M.opts.subdirectories.attachments, item.id .. '.md')
-    utils.write_to_file(item.attachment_path, "# " .. item.id .. ": " .. item.title)
     M.save_item(item)
+    if not utils.file_exists(item.attachment_path) then
+        utils.write_to_file(item.attachment_path, "# " .. item.id .. ": " .. item.title)
+    end
     return true
 end
 

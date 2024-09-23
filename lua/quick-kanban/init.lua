@@ -105,4 +105,9 @@ M.edit_item = function()
     qkb.edit_item()
 end
 
+--- End the editing of the attachment of the selected item
+M.end_editing = function()
+    qkb.end_editing()
+end
+
 return M
