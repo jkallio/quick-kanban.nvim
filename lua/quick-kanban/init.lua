@@ -8,7 +8,7 @@ local M = {}
 M.setup = function(options)
     local config = require('quick-kanban.config')
     config.setup(options)
-    qkb.setup(config.options)
+    qkb.setup(config)
 end
 
 --- Open the kanban board UI

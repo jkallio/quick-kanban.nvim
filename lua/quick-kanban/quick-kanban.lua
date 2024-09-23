@@ -11,29 +11,12 @@ local KANBAN_KEY = "kanban"
 --- @type table
 local M = {
     -- Options for the plugin
-    opts = {},
+    -- @type table
+    config = {},
 
-    state = {
-        --- This variable is `true` if Kanban UI is open
-        --- @type boolean
-        is_open = false,
-
-        --- The name of the currently active category.
-        --- @type string? The category name
-        selected_category = nil,
-
-        --- The id of the currently selected item
-        --- @type number?
-        selected_item_id = nil,
-
-        --- The id of the item currently being previewed
-        --- @type number?
-        preview_item_id = nil,
-
-        --- Window information for each Kanban category
-        --- @type table where the key is the name of the category from opts.categories
-        windows = {}
-    }
+    -- State of the plugin
+    -- @type table
+    state = {}
 }
 
 -------------------------------------------------------------------------------
@@ -44,7 +27,7 @@ local M = {
 vim.api.nvim_create_autocmd('WinEnter', {
     group = vim.api.nvim_create_augroup('MonitorWinEnter', { clear = true }),
     callback = function()
-        local wid = M.get_current_win_id()
+        local wid = M.state.get_current_wid()
         if wid == nil then
             if M.state.is_open then
                 M.close_ui()
@@ -57,8 +40,9 @@ vim.api.nvim_create_autocmd('WinEnter', {
 vim.api.nvim_create_autocmd('WinLeave', {
     group = vim.api.nvim_create_augroup('MonitorWinLeave', { clear = true }),
     callback = function()
-        local wid = M.get_current_win_id()
-        if wid ~= nil and M.state.windows[PREVIEW_KEY] ~= nil and wid == M.state.windows[PREVIEW_KEY].id then
+        local wid = M.state.get_current_wid()
+        if wid ~= nil and wid == M.state.get_wid_for_category(PREVIEW_KEY) then
+            -- Save unsaved changes to the attachment file
             local bufnr = vim.api.nvim_win_get_buf(wid)
             if vim.api.nvim_get_option_value('modified', { buf = bufnr }) then
                 vim.api.nvim_command('write')
@@ -83,9 +67,9 @@ local create_kanban_directories = function(path)
         end
 
         utils.touch_directory(path)
-        utils.touch_directory(utils.concat_paths(path, M.opts.subdirectories.items))
-        utils.touch_directory(utils.concat_paths(path, M.opts.subdirectories.archive))
-        utils.touch_directory(utils.concat_paths(path, M.opts.subdirectories.attachments))
+        utils.touch_directory(utils.concat_paths(path, M.config.options.subdirectories.items))
+        utils.touch_directory(utils.concat_paths(path, M.config.options.subdirectories.archive))
+        utils.touch_directory(utils.concat_paths(path, M.config.options.subdirectories.attachments))
         data.reload_kanban_meta_file()
     end
     return true
@@ -109,115 +93,50 @@ end
 --- Reload window buffer for category
 --- @param category string
 local reload_buffer_for_category = function(category)
-    if category == nil or M.state.windows[category] == nil then
+    local window = M.state.get_window(category)
+    if window == nil or window.bufnr == nil then
         return
     end
 
     local items = category == ARCHIVE_KEY and data.get_archived_items() or data.get_items_for_category_sorted(category)
-    local buf_lines = {}
+    local lines = {}
     for _, item in ipairs(items) do
-        table.insert(buf_lines, " [" .. item.id .. "] " .. item.title)
+        table.insert(lines, " [" .. item.id .. "] " .. item.title)
     end
 
-    local bufnr = M.state.windows[category].bufnr
-    if bufnr == nil then
-        return
-    end
-
-    vim.api.nvim_set_option_value('modifiable', true, { buf = bufnr })
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, buf_lines)
-    hilight_item_ids_in_buffer(bufnr)
-    vim.api.nvim_set_option_value('modifiable', false, { buf = bufnr })
+    vim.api.nvim_set_option_value('modifiable', true, { buf = window.bufnr })
+    vim.api.nvim_buf_set_lines(window.bufnr, 0, -1, false, lines)
+    --
+    -- TODO: This iterates over all the lines twice, which is not optimal
+    -- Move the highlighting into the buffer update loop above?
+    --
+    hilight_item_ids_in_buffer(window.bufnr)
+    vim.api.nvim_set_option_value('modifiable', false, { buf = window.bufnr })
 end
 
---- Get the category for the given index
---- @param index number The index of a table
---- @return string? category The category for the given index (or `nil` if not found)
-M.get_category = function(index)
-    for i, category in ipairs(M.opts.categories) do
-        if i == index then
-            return category
-        end
-    end
-    utils.log.error("Failed to get category for index: " .. index)
-    return nil
-end
-
---- Get the table index for the given window id
---- @param wid number The window id
---- @return number? index The table index for the given window id (or `nil` if not found)
-M.get_win_index = function(wid)
-    for _, win in pairs(M.state.windows) do
-        if win.id == wid then
-            return win.index
-        end
-    end
-    return nil
-end
-
---- Get the currently active window id
---- @return number? wid The current window id (or `nil` if Kanban window is not active)
-M.get_current_win_id = function()
-    local wid = vim.api.nvim_get_current_win()
-    for _, win in pairs(M.state.windows) do
-        if win.id == wid then
-            return wid
-        end
-    end
-    return nil
-end
-
---- Get the currently active buffer number
---- @return number? bufnr The current buffer number (or `nil` if not found)
-M.get_current_bufnr = function()
-    local wid = M.get_current_win_id()
-    if wid ~= nil then
-        return vim.api.nvim_win_get_buf(wid)
-    end
-    return nil
-end
-
---- Get the ID from the item currenlty under the cursor
---- @return number? item_id The ID of the item under the cursor (or `nil` if not found)
-M.get_item_id_under_cursor = function()
-    local wid = M.get_current_win_id()
-    if wid == nil then
-        utils.log.error("Failed to get item; Active window not found")
-        return nil
-    end
-
-    local line_num = vim.fn.line('.', wid)
-    if line_num == 0 then
-        utils.log.error("Failed to get item; Active line not found")
-        return nil
-    end
-
-    local item_id = string.match(vim.fn.getline(line_num), "%[(.*)%]")
-    if item_id ~= nil then
-        return tonumber(item_id)
-    end
-
-    return nil
-end
 
 --- Set the focus to the category at the given index
 --- @param index number The index of the category to focus
-M.set_category_focus = function(index)
+local set_category_focus = function(index)
     local cur_category = M.state.selected_category
     local new_category = nil
 
-    if index > #M.opts.categories and M.opts.show_archive then
+    if index > #M.config.options.categories and M.config.options.show_archive then
+        -- If the index is out of bounds, move to archive (or archive the selected item)
         if M.state.selected_item_id ~= nil then
             M.archive_selected_item()
             M.toggle_selected_item()
             return
+        else
+            new_category = ARCHIVE_KEY
         end
-        new_category = ARCHIVE_KEY
     elseif M.state.selected_category == ARCHIVE_KEY then
-        new_category = M.opts.categories[#M.opts.categories]
+        -- When moving from archive, move to the last category
+        new_category = M.config.options.categories[#M.config.options.categories]
     else
-        index = vim.fn.max({ 1, vim.fn.min({ #M.opts.categories, index }) })
-        new_category = M.get_category(index)
+        -- Ensure the index is within the bounds
+        index = vim.fn.max({ 1, vim.fn.min({ #M.config.options.categories, index }) })
+        new_category = M.config.get_category(index)
     end
 
     if cur_category == nil or new_category == nil then
@@ -227,12 +146,10 @@ M.set_category_focus = function(index)
         return
     end
 
-    local cur_wid = M.state.windows[cur_category].id
-    local new_wid = M.state.windows[new_category].id
+    local cur_wid = M.state.get_wid_for_category(cur_category)
+    local new_wid = M.state.get_wid_for_category(new_category)
     if new_wid == nil or cur_wid == nil then
-        utils.log.error("Unexpected error: "
-            .. "cur_wid=" .. (cur_wid or "nil") .. "; "
-            .. "new_wid=" .. (new_wid or "nil"))
+        utils.log.error("Unexpected error: " .. "cur_wid=" .. cur_wid .. "; " .. "new_wid=" .. new_wid)
         return
     end
 
@@ -252,57 +169,50 @@ M.set_category_focus = function(index)
     then
         reload_buffer_for_category(cur_category)
         reload_buffer_for_category(new_category)
-        M.set_item_focus(1)
+        M.set_current_buffer_line_focus(1)
     else
-        M.set_item_focus(M.state.windows[new_category].selected_line or 1)
+        M.set_current_buffer_line_focus(M.state.get_selected_line_for_category(new_category))
     end
 end
 
---- Set the focus to the item at the given index
---- @param new_idx number The index of the item to focus
-M.set_item_focus = function(new_idx)
+--- Set the focus to the line number in the current window/buffer
+--- @param line_num number The line number to focus
+M.set_current_buffer_line_focus = function(line_num)
+    local cur_wid = M.state.get_current_wid()
+    if cur_wid == nil then
+        utils.log.error("Failed to set item focus; Active window not found")
+        return
+    end
+
     -- Ensure the line is within the bounds
     local cur_idx = vim.fn.line('.')
-    new_idx = vim.fn.max({ 1, vim.fn.min({ vim.fn.line('$'), new_idx }) })
-
-    -- If item is currently selected, move it to new index
-    if M.state.selected_item_id ~= nil
-        and cur_idx ~= new_idx
-        and data.move_item_within_category(M.state.selected_item_id, new_idx - cur_idx) then
-        reload_buffer_for_category(M.state.selected_category)
+    line_num = vim.fn.max({ 1, vim.fn.min({ vim.fn.line('$'), line_num }) })
+    if cur_idx == line_num then
+        return
+    end
+    -- If an item is currently selected, move it to new index
+    if M.state.is_item_selected() then
+        if data.move_item_within_category(M.state.selected_item_id, line_num - cur_idx) then
+            reload_buffer_for_category(M.state.selected_category)
+        else
+            utils.log.error("Failed to move item; ID=" .. M.state.selected_item_id .. "; Index=" .. line_num)
+            return
+        end
     end
 
     -- Update the cursor position in buffer
-    vim.api.nvim_win_set_cursor(vim.api.nvim_get_current_win(), { new_idx, 99 })
-    M.state.windows[M.state.selected_category].selected_line = new_idx
-end
-
---- Hide the cursor (...and save the original settings)
-M.hide_cursor = function()
-    vim.g.saved_cursor_blend = vim.api.nvim_get_hl(0, { name = "Cursor" }).blend
-    vim.g.saved_guicursor = vim.o.guicursor
-    vim.cmd([[hi Cursor blend=100]])
-    vim.cmd([[set guicursor+=a:Cursor/lCursor]])
-end
-
---- Show the cursor (...by restoring the original settings)
-M.show_cursor = function()
-    if vim.g.saved_cursor_blend ~= nil then
-        vim.cmd([[hi Cursor blend=vim.g.saved_cursor_blend]])
-    end
-    if vim.g.saved_guicursor ~= nil then
-        vim.o.guicursor = vim.g.saved_guicursor
-    end
+    vim.api.nvim_win_set_cursor(cur_wid, { line_num, 99 })
+    M.state.set_selected_line_for_category(M.state.selected_category, line_num)
 end
 
 --- Returns
 local get_help_text_lines = function(keymaps)
     local lines = {}
-    local center = (M.opts.window.width * #M.opts.categories) / 2
+    local center = (M.config.options.window.width * #M.config.options.categories) / 2
 
     -- Collect all the keymaps from the table and format them
     local items = {}
-    local rows = vim.fn.floor(M.opts.window.height / 2) - 7
+    local rows = vim.fn.floor(M.config.options.window.height / 2) - 7
     for _, keymap in pairs(keymaps) do
         if keymap.keys == nil or keymap.desc == nil then
             utils.log.warn("Invalid keymap: " .. vim.inspect(keymap))
@@ -352,14 +262,18 @@ end
 -------------------------------------------------------------------------------
 
 --- Setup the plugin with the given options
---- @param opts table The options to configure the plugin
-M.setup = function(opts)
-    M.opts = opts
-    data.setup(opts)
+--- @param config table The config table to configure the plugin
+M.setup = function(config)
+    M.config = config
+
+    M.state = require('quick-kanban.state')
+    M.state.setup(M.config.options)
+
+    data.setup(M.config.options)
 
     M.state.selected_view = KANBAN_KEY
-    M.state.selected_category = M.opts.default_category
-    for i, category in ipairs(M.opts.categories) do
+    M.state.selected_category = M.config.options.default_category
+    for i, category in ipairs(M.config.options.categories) do
         M.state.windows[category] = {
             index = i,
             id = nil,
@@ -371,30 +285,33 @@ M.setup = function(opts)
     -- Set the window hilight groups
     vim.api.nvim_set_hl(WIN_HILIGHT_ACTIVE, "NormalFloat", { bg = "None", fg = "#DDDDDD" })
     vim.api.nvim_set_hl(WIN_HILIGHT_ACTIVE, "CursorLine",
-        { bg = M.opts.window.active_text_bg, fg = M.opts.window.active_text_fg })
+        { bg = M.config.options.window.active_text_bg, fg = M.config.options.window.active_text_fg })
     vim.api.nvim_set_hl(WIN_HILIGHT_ACTIVE, "CursorLineNr",
-        { bg = M.opts.window.active_text_bg, fg = M.opts.window.active_text_fg })
-    vim.api.nvim_set_hl(WIN_HILIGHT_ACTIVE, "FloatBorder", { bg = "None", fg = M.opts.window.accent_color })
-    vim.api.nvim_set_hl(WIN_HILIGHT_ACTIVE, "FloatTitle", { bg = "None", fg = M.opts.window.accent_color })
-    vim.api.nvim_set_hl(WIN_HILIGHT_ACTIVE, "FloatFooter", { bg = "None", fg = M.opts.window.accent_color })
-    vim.api.nvim_set_hl(WIN_HILIGHT_ACTIVE, "PrefixHilight", { bg = "None", fg = M.opts.window.accent_color })
+        { bg = M.config.options.window.active_text_bg, fg = M.config.options.window.active_text_fg })
+    vim.api.nvim_set_hl(WIN_HILIGHT_ACTIVE, "FloatBorder", { bg = "None", fg = M.config.options.window.accent_color })
+    vim.api.nvim_set_hl(WIN_HILIGHT_ACTIVE, "FloatTitle", { bg = "None", fg = M.config.options.window.accent_color })
+    vim.api.nvim_set_hl(WIN_HILIGHT_ACTIVE, "FloatFooter", { bg = "None", fg = M.config.options.window.accent_color })
+    vim.api.nvim_set_hl(WIN_HILIGHT_ACTIVE, "PrefixHilight", { bg = "None", fg = M.config.options.window.accent_color })
 
     vim.api.nvim_set_hl(WIN_HILIGHT_INACTIVE, "NormalFloat", { bg = "None", fg = "#888888" })
     vim.api.nvim_set_hl(WIN_HILIGHT_INACTIVE, "CursorLine", { bg = "#222222", fg = "None" })
     vim.api.nvim_set_hl(WIN_HILIGHT_INACTIVE, "CursorLineNr", { bg = "#222222", fg = "None" })
     vim.api.nvim_set_hl(WIN_HILIGHT_INACTIVE, "FloatBorder", { bg = "None", fg = "#444444" })
-    vim.api.nvim_set_hl(WIN_HILIGHT_INACTIVE, "FloatTitle", { bg = "None", fg = M.opts.window.accent_color })
+    vim.api.nvim_set_hl(WIN_HILIGHT_INACTIVE, "FloatTitle", { bg = "None", fg = M.config.options.window.accent_color })
     vim.api.nvim_set_hl(WIN_HILIGHT_INACTIVE, "FloatFooter", { bg = "None", fg = "#444444" })
     vim.api.nvim_set_hl(WIN_HILIGHT_INACTIVE, "PrefixHilight", { bg = "None", fg = "#444444" })
 
     vim.api.nvim_set_hl(WIN_HILIGHT_ITEM_SELECTED, "NormalFloat", { bg = "None", fg = "#DDDDDD" })
     vim.api.nvim_set_hl(WIN_HILIGHT_ITEM_SELECTED, "CursorLine",
-        { bg = M.opts.window.selected_text_bg, fg = M.opts.window.selected_text_fg })
+        { bg = M.config.options.window.selected_text_bg, fg = M.config.options.window.selected_text_fg })
     vim.api.nvim_set_hl(WIN_HILIGHT_ITEM_SELECTED, "CursorLineNr",
-        { bg = M.opts.window.selected_text_bg, fg = M.opts.window.selected_text_fg })
-    vim.api.nvim_set_hl(WIN_HILIGHT_ITEM_SELECTED, "FloatBorder", { bg = "None", fg = M.opts.window.hilight_color })
-    vim.api.nvim_set_hl(WIN_HILIGHT_ITEM_SELECTED, "FloatTitle", { bg = "None", fg = M.opts.window.hilight_color })
-    vim.api.nvim_set_hl(WIN_HILIGHT_ITEM_SELECTED, "FloatFooter", { bg = "None", fg = M.opts.window.hilight_color })
+        { bg = M.config.options.window.selected_text_bg, fg = M.config.options.window.selected_text_fg })
+    vim.api.nvim_set_hl(WIN_HILIGHT_ITEM_SELECTED, "FloatBorder",
+        { bg = "None", fg = M.config.options.window.hilight_color })
+    vim.api.nvim_set_hl(WIN_HILIGHT_ITEM_SELECTED, "FloatTitle",
+        { bg = "None", fg = M.config.options.window.hilight_color })
+    vim.api.nvim_set_hl(WIN_HILIGHT_ITEM_SELECTED, "FloatFooter",
+        { bg = "None", fg = M.config.options.window.hilight_color })
     vim.api.nvim_set_hl(WIN_HILIGHT_ITEM_SELECTED, "PrefixHilight", { bg = "None", fg = "#888888" })
 end
 
@@ -404,10 +321,10 @@ M.next_category = function()
         return
     end
 
-    for i, category in ipairs(M.opts.categories) do
+    for i, category in ipairs(M.config.options.categories) do
         if category == M.state.selected_category then
-            M.set_category_focus(i + 1)
-            M.update_preview()
+            set_category_focus(i + 1)
+            M.update_preview(nil, false)
             return
         end
     end
@@ -416,13 +333,13 @@ end
 --- Move focus to the previous category
 M.prev_category = function()
     if M.state.selected_category == ARCHIVE_KEY then
-        M.set_category_focus(#M.opts.categories)
-        M.update_preview()
+        set_category_focus(#M.config.options.categories)
+        M.update_preview(nil, false)
     else
-        for i, category in ipairs(M.opts.categories) do
+        for i, category in ipairs(M.config.options.categories) do
             if category == M.state.selected_category then
-                M.set_category_focus(i - 1)
-                M.update_preview()
+                set_category_focus(i - 1)
+                M.update_preview(nil, false)
                 return
             end
         end
@@ -432,21 +349,21 @@ end
 --- Move item focus to the next item
 M.next_item = function()
     local curline = vim.fn.line('.')
-    M.set_item_focus(curline + 1)
-    M.update_preview()
+    M.set_current_buffer_line_focus(curline + 1)
+    M.update_preview(nil, false)
 end
 
 --- Move item focus to the previous ite
 M.prev_item = function()
     local curline = vim.fn.line('.')
-    M.set_item_focus(curline - 1)
-    M.update_preview()
+    M.set_current_buffer_line_focus(curline - 1)
+    M.update_preview(nil, false)
 end
 
 --- Open the kanban board UI
 M.open_ui = function()
-    if not utils.directory_exists(M.opts.path) then
-        if not create_kanban_directories(M.opts.path) then
+    if not utils.directory_exists(M.config.options.path) then
+        if not create_kanban_directories(M.config.options.path) then
             return
         end
     end
@@ -502,57 +419,58 @@ M.open_ui = function()
         utils.set_keymap(bufnr, keymaps.rename, ':lua require("quick-kanban").rename_item()<cr>')
     end
 
-    if M.opts.window.hide_cursor then
-        M.hide_cursor()
+    if M.config.options.window.hide_cursor then
+        utils.hide_cursor()
     end
 
     -- Get the main UI (1st element in the ui list)
     local ui = vim.api.nvim_list_uis()[1]
-    local win_width = vim.fn.min({ M.opts.window.width, vim.fn.floor(ui.width / #M.opts.categories) })
-    local win_height = vim.fn.min({ M.opts.window.height - 2 * M.opts.window.vertical_gap, (ui.height - 3) -
-    2 * M.opts.window.vertical_gap })
-    local win_pos_left = vim.fn.floor(ui.width / 2 - (win_width * #M.opts.categories / 2)) -
-        (M.opts.show_archive and (win_width / 2) or 0)
-    if M.opts.show_preview then
+    local win_width = vim.fn.min({ M.config.options.window.width, vim.fn.floor(ui.width / #M.config.options.categories) })
+    local win_height = vim.fn.min({ M.config.options.window.height - 2 * M.config.options.window.vertical_gap, (ui.height - 3) -
+    2 * M.config.options.window.vertical_gap })
+    local win_pos_left = vim.fn.floor(ui.width / 2 - (win_width * #M.config.options.categories / 2)) -
+        (M.config.options.show_archive and (win_width / 2) or 0)
+    if M.config.options.show_preview then
         win_height = vim.fn.floor(win_height / 2)
     end
 
     -- Create a window for each category
-    for i, category in ipairs(M.opts.categories) do
+    for i, category in ipairs(M.config.options.categories) do
         local win_size = {
             width = win_width,
             height = win_height
         }
         local win_pos = {
-            col = win_pos_left + (i - 1) * (win_width + M.opts.window.horizontal_gap),
-            row = M.opts.window.vertical_gap
+            col = win_pos_left + (i - 1) * (win_width + M.config.options.window.horizontal_gap),
+            row = M.config.options.window.vertical_gap
         }
         local wid, bufnr = utils.open_popup_window(
-            (M.opts.window.title_decoration[1] .. category .. M.opts.window.title_decoration[2]), win_size, win_pos)
+            (M.config.options.window.title_decoration[1] .. category .. M.config.options.window.title_decoration[2]),
+            win_size, win_pos)
 
-        M.state.windows[category].id = wid
-        M.state.windows[category].bufnr = bufnr
+        M.state.set_wid_for_category(category, wid)
+        M.state.set_buf_for_category(category, bufnr)
 
-        set_window_options(wid, M.opts)
+        set_window_options(wid, M.config.options)
         set_buffer_options(bufnr)
         disable_default_keys(bufnr)
-        set_keymaps(bufnr, M.opts.keymaps)
+        set_keymaps(bufnr, M.config.options.keymaps)
 
-        M.state.windows[category].selected_line = M.state.windows[category].selected_line or 1
+        --M.state.windows[category].selected_line = M.state.windows[category].selected_line or 1
         reload_buffer_for_category(category)
     end
 
     --- Create preview window
-    if M.opts.show_preview then
+    if M.config.options.show_preview then
         local wid, bufnr = utils.open_popup_window("",
             {
-                width = vim.fn.round(#M.opts.categories * win_width) +
-                    (#M.opts.categories - 1) * M.opts.window.horizontal_gap,
+                width = vim.fn.round(#M.config.options.categories * win_width) +
+                    (#M.config.options.categories - 1) * M.config.options.window.horizontal_gap,
                 height = win_height
             },
             {
                 col = win_pos_left,
-                row = win_height + 1 + M.opts.window.vertical_gap * 2
+                row = win_height + 1 + M.config.options.window.vertical_gap * 2
             })
 
         M.state.windows[PREVIEW_KEY] = {}
@@ -560,7 +478,7 @@ M.open_ui = function()
         M.state.windows[PREVIEW_KEY].bufnr = bufnr
 
         -- Create a help text buffer for the default preview window
-        local help_text = get_help_text_lines(M.opts.keymaps)
+        local help_text = get_help_text_lines(M.config.options.keymaps)
         vim.api.nvim_buf_set_lines(bufnr, 1, -1, false, help_text)
 
         -- Set the buffer options
@@ -570,7 +488,7 @@ M.open_ui = function()
 
         -- Set the window options
         vim.api.nvim_set_option_value('number', false, { win = wid })
-        vim.api.nvim_set_option_value('winblend', M.opts.window.blend, { win = wid })
+        vim.api.nvim_set_option_value('winblend', M.config.options.window.blend, { win = wid })
         vim.api.nvim_set_option_value('wrap', false, { win = wid })
         vim.api.nvim_set_option_value('linebreak', false, { win = wid })
 
@@ -582,16 +500,18 @@ M.open_ui = function()
     end
 
     --- Create the archive window
-    if M.opts.show_archive then
+    if M.config.options.show_archive then
         local wid, bufnr = utils.open_popup_window(
-            (M.opts.window.title_decoration[1] .. "Archive" .. M.opts.window.title_decoration[2]),
+            (M.config.options.window.title_decoration[1] .. "Archive" .. M.config.options.window.title_decoration[2]),
             {
                 width = win_width,
-                height = win_height + (M.opts.show_preview and (win_height + M.opts.window.vertical_gap * 2) or 0)
+                height = win_height +
+                    (M.config.options.show_preview and (win_height + M.config.options.window.vertical_gap * 2) or 0)
             },
             {
-                col = win_pos_left + (#M.opts.categories) * (win_width + M.opts.window.horizontal_gap),
-                row = M.opts
+                col = win_pos_left +
+                    (#M.config.options.categories) * (win_width + M.config.options.window.horizontal_gap),
+                row = M.config.options
                     .window.vertical_gap
             })
 
@@ -599,20 +519,22 @@ M.open_ui = function()
         M.state.windows[ARCHIVE_KEY].id = wid
         M.state.windows[ARCHIVE_KEY].bufnr = bufnr
 
-        set_window_options(wid, M.opts)
+        set_window_options(wid, M.config.options)
         set_buffer_options(bufnr)
         disable_default_keys(bufnr)
-        set_keymaps(bufnr, M.opts.keymaps)
-        utils.set_keymap(bufnr, M.opts.keymaps.archive_item, ':lua require("quick-kanban").unarchive_item()<cr>')
-        utils.set_keymap(bufnr, M.opts.keymaps.unarchive_item, ':lua require("quick-kanban").unarchive_item()<cr>')
+        set_keymaps(bufnr, M.config.options.keymaps)
+        utils.set_keymap(bufnr, M.config.options.keymaps.archive_item,
+            ':lua require("quick-kanban").unarchive_item()<cr>')
+        utils.set_keymap(bufnr, M.config.options.keymaps.unarchive_item,
+            ':lua require("quick-kanban").unarchive_item()<cr>')
 
-        M.state.windows[ARCHIVE_KEY].selected_line = M.state.windows[ARCHIVE_KEY].selected_line or 1
+        --M.state.windows[ARCHIVE_KEY].selected_line = M.state.windows[ARCHIVE_KEY].selected_line or 1
         reload_buffer_for_category(ARCHIVE_KEY)
     end
 
-    M.set_category_focus(M.state.windows[M.state.selected_category].index or 1)
-    M.set_item_focus(M.state.windows[M.state.selected_category].selected_line or 1)
-    M.update_preview()
+    set_category_focus(M.config.get_category_index(M.state.selected_category) or 1)
+    M.set_current_buffer_line_focus(M.state.get_selected_line_for_category(M.state.selected_category))
+    M.update_preview(nil, false)
     M.state.is_open = true
 end
 
@@ -620,21 +542,18 @@ end
 M.close_ui = function()
     M.state.is_open = false
     M.state.selected_item_id = nil
-
-    if M.opts.window.hide_cursor then
-        M.show_cursor()
-    end
+    utils.show_cursor()
 
     for key, win in pairs(M.state.windows) do
         if vim.api.nvim_win_is_valid(win.id or -1) then
             vim.api.nvim_win_close(win.id, true)
         end
-        M.state.windows[key].id = nil
+        M.state.set_wid_for_category(key, nil)
 
         if vim.api.nvim_buf_is_valid(win.bufnr or -1) then
             vim.api.nvim_buf_delete(win.bufnr, { force = true })
         end
-        M.state.windows[key].bufnr = nil
+        M.state.set_buf_for_category(key, nil)
     end
 end
 
@@ -644,21 +563,22 @@ M.toggle_selected_item = function()
         return
     end
 
-    local wid = M.get_current_win_id()
+    local wid = M.state.get_current_wid()
     if wid == nil then
         utils.log.error("Cannot select item; Active window not found")
         return
     end
 
-    M.state.selected_item_id = M.state.selected_item_id == nil and M.get_item_id_under_cursor() or nil
+    M.state.selected_item_id = M.state.selected_item_id == nil and M.state.get_current_item_id() or nil
     vim.api.nvim_win_set_hl_ns(wid,
         M.state.selected_item_id ~= nil and WIN_HILIGHT_ITEM_SELECTED or WIN_HILIGHT_ACTIVE)
 end
 
 --- Open the item under cursor
 M.open_selected_item = function()
-    local item = data.items[M.get_item_id_under_cursor() or -1]
+    local item = data.items[M.state.get_current_item_id() or -1]
     if item == nil then
+        utils.log.error("Failed to open item: item=nil")
         return
     end
 
@@ -676,14 +596,15 @@ M.add_item = function()
         return
     end
 
-    data.add_item(M.opts.default_category, input)
-    reload_buffer_for_category(M.opts.default_category)
+    data.add_item(M.config.options.default_category, input)
+    reload_buffer_for_category(M.config.options.default_category)
 end
 
 --- Rename the current item
 M.rename_item = function()
-    local item = data.items[M.get_item_id_under_cursor() or -1]
+    local item = data.items[M.state.get_current_item_id() or -1]
     if item == nil then
+        utils.log.error("Failed to rename item: item=nil")
         return
     end
 
@@ -698,7 +619,7 @@ end
 --- Archive the selected item
 --- @return boolean `true` if the item was archived
 M.archive_selected_item = function()
-    local item = data.items[M.get_item_id_under_cursor() or -1]
+    local item = data.items[M.state.get_current_item_id() or -1]
     if item == nil then
         utils.log.error("Failed to archive item: item=nil")
         return false
@@ -723,7 +644,7 @@ M.unarchive_selected_item = function()
         return false
     end
 
-    local item = data.unarchive_item(M.get_item_id_under_cursor() or -1)
+    local item = data.unarchive_item(M.state.get_current_item_id() or -1)
     if item == nil then
         utils.log.error("Failed to unarchive item: item=nil")
         return false
@@ -737,7 +658,7 @@ end
 --- Delete selected item
 --- @return boolean `true` if the item was deleted
 M.delete_selected_item = function()
-    local item = data.get_item(M.get_item_id_under_cursor() or -1)
+    local item = data.get_item(M.state.get_current_item_id() or -1)
     if item == nil then
         utils.log.error("Failed to delete item: item=nil")
         return false
@@ -755,48 +676,57 @@ M.delete_selected_item = function()
 end
 
 --- Update the preview window
-M.update_preview = function()
-    if not M.opts.show_preview then
+--- @param item table? The item to preview
+--- @param edit_mode boolean True if should stay in preview window
+M.update_preview = function(item, edit_mode)
+    if M.state.is_item_selected() or not M.config.options.show_preview then
         return
     end
 
-    local item_id = M.get_item_id_under_cursor()
-    if item_id == M.state.preview_item_id then
-        return
-    end
-
-    local item = data.get_item(item_id or -1)
+    -- If no item is provided, get the current item
     if item == nil then
-        M.show_help_text()
-        return
-    elseif item.attachment_path ~= nil and utils.file_exists(item.attachment_path) then
-        M.state.preview_item_id = item_id
-    else
-        -- Create and set a new empty buffer in Preview window
-        M.state.preview_item_id = nil
-        vim.api.nvim_win_set_buf(M.state.windows[PREVIEW_KEY].id, vim.api.nvim_create_buf(false, true))
-        return
+        local item_id = M.state.get_current_item_id()
+        item = data.get_item(item_id or -1)
+        if item == nil then
+            M.state.preview_item_id = nil
+            M.show_help_text()
+            return
+        end
     end
 
-    local wid = M.state.windows[PREVIEW_KEY].id
+    M.state.preview_item_id = item.id
+    local wid = M.state.get_wid_for_category(PREVIEW_KEY)
     if wid == nil then
         utils.log.error("Failed to update preview; Preview window not found")
+        return
+    end
+
+    -- If item has no attachment, create and set a new empty buffer in Preview window
+    if item.attachment_path == nil or not utils.file_exists(item.attachment_path) then
+        M.state.preview_item_id = nil
+        vim.api.nvim_win_set_buf(wid, vim.api.nvim_create_buf(false, true))
         return
     end
 
     -- Store the currently active window (to restore it later)
     local cur_wid = vim.api.nvim_get_current_win()
 
+    --
+    -- TODO: Should we cache the loaded attachment buffers?
+    --
     vim.api.nvim_set_current_win(wid)
     vim.cmd('edit! ' .. item.attachment_path)
     local bufnr = vim.api.nvim_get_current_buf()
     vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
     vim.api.nvim_set_option_value('buflisted', false, { buf = bufnr })
-    vim.api.nvim_win_set_hl_ns(wid, WIN_HILIGHT_ACTIVE)
-    vim.api.nvim_set_option_value('winblend', M.opts.window.blend, { win = wid })
+    vim.api.nvim_set_option_value('winblend', M.config.options.window.blend, { win = wid })
+    utils.set_keymap(bufnr, M.config.options.keymaps.end_editing, ':lua require("quick-kanban").end_editing()<cr>')
 
-    -- Restore the previously active window
-    if cur_wid ~= nil then
+    if edit_mode then
+        vim.api.nvim_win_set_hl_ns(wid, WIN_HILIGHT_ACTIVE)
+        vim.api.nvim_win_set_hl_ns(cur_wid, WIN_HILIGHT_INACTIVE)
+        utils.show_cursor()
+    elseif cur_wid ~= nil then
         vim.api.nvim_set_current_win(cur_wid)
     else
         M.close_ui()
@@ -805,17 +735,23 @@ end
 
 --- Show the help text in the preview window
 M.show_help_text = function()
-    if not M.opts.show_preview then
+    if not M.config.options.show_preview then
         M.toggle_preview_window()
     end
-    vim.api.nvim_win_set_buf(M.state.windows[PREVIEW_KEY].id, M.state.windows[PREVIEW_KEY].bufnr)
+
+    local win = M.state.get_window(PREVIEW_KEY)
+    if win == nil or win.id == nil or win.bufnr == nil then
+        utils.log.error("Failed to show help text; Preview window not found")
+        return
+    end
+    vim.api.nvim_win_set_buf(win.id, win.bufnr)
 end
 
 --- Toggle the visibility of the archive category
 M.toggle_archive_window = function()
-    M.opts.show_archive = not M.opts.show_archive
-    if (M.opts.show_archive == false) and M.state.selected_category == ARCHIVE_KEY then
-        M.state.selected_category = M.opts.default_category
+    M.config.options.show_archive = not M.config.options.show_archive
+    if (M.config.options.show_archive == false) and M.state.selected_category == ARCHIVE_KEY then
+        M.state.selected_category = M.config.options.default_category
     end
     M.close_ui()
     M.open_ui()
@@ -823,82 +759,62 @@ end
 
 --- Toggle the visibility of the preview category
 M.toggle_preview_window = function()
-    M.opts.show_preview = not M.opts.show_preview
+    M.config.options.show_preview = not M.config.options.show_preview
     M.close_ui()
     M.open_ui()
 end
 
 --- Edit the attachment of the selected item directly in the preview window
 M.edit_item = function()
-    if not M.opts.show_preview then
-        return M.open_selected_item()
-    end
-
     if M.state.selected_category == ARCHIVE_KEY then
         utils.log.warn("Cannot edit archived items")
         return
     end
 
-    local item = data.get_item(M.get_item_id_under_cursor() or -1)
+    local item = data.get_item(M.state.get_current_item_id() or -1)
     if item == nil then
         return
     end
 
+    if M.config.options.show_preview == false then
+        M.config.options.show_preview = true
+        M.close_ui()
+        M.open_ui()
+    end
+
     if item.attachment_path == nil then
         data.create_attachment(item)
-        M.update_preview()
     end
 
-    if M.state.windows[PREVIEW_KEY] == nil then
-        utils.log.error("Failed to switch to preview; Preview window not found")
-        return
-    end
-
-    local wid = M.state.windows[PREVIEW_KEY].id
-    if wid == nil then
-        utils.log.error("Failed to switch to preview; Preview window not found")
-        return
-    end
-
-    M.show_cursor()
-
-    local cur_wid = vim.api.nvim_get_current_win()
-    vim.api.nvim_win_set_hl_ns(cur_wid, WIN_HILIGHT_INACTIVE)
-
-    vim.api.nvim_set_current_win(wid)
-    vim.api.nvim_win_set_hl_ns(wid, WIN_HILIGHT_ACTIVE)
-
-    utils.set_keymap(vim.api.nvim_win_get_buf(wid), M.opts.keymaps.end_editing,
-        ':lua require("quick-kanban").end_editing()<cr>')
+    M.update_preview(item, true)
 end
 
 --- End editing the attachment
 M.end_editing = function()
     local wid = vim.api.nvim_get_current_win()
-    if M.state.windows[PREVIEW_KEY] == nil or wid ~= M.state.windows[PREVIEW_KEY].id then
+    if M.state.get_wid_for_category(PREVIEW_KEY) ~= wid then
         utils.log.error("Not in edit mode")
         return
     end
-
-    -- local bufnr = vim.api.nvim_win_get_buf(wid)
-    -- local is_modified = vim.api.nvim_get_option_value('modified', { buf = bufnr })
-    -- if is_modified then
-    --     vim.api.nvim_command('write')
-    -- end
+    vim.api.nvim_win_set_hl_ns(wid, WIN_HILIGHT_INACTIVE)
 
     if M.state.selected_category == nil then
-        M.state.selected_category = M.opts.default_category
+        M.state.selected_category = M.config.options.default_category
     end
 
-    if M.state.windows[M.state.selected_category] == nil then
+    local window = M.state.get_window(M.state.selected_category)
+    if window == nil then
         utils.log.error("Failed to end editing; Active window not found")
         close_ui()
         return
     end
 
-    M.set_category_focus(M.state.windows[M.state.selected_category].index)
-    M.set_item_focus(M.state.windows[M.state.selected_category].selected_line)
-    M.hide_cursor()
+    set_category_focus(window.index)
+    M.set_current_buffer_line_focus(window.selected_line)
+
+    if M.config.options.window.hide_cursor then
+        utils.hide_cursor()
+    end
 end
 
 return M

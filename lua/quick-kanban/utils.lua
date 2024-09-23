@@ -1,4 +1,6 @@
 local logger = require('plenary.log')
+vim.g.quick_kanban_debug = true
+
 local M = {}
 
 --- Initialize the plenary logger
@@ -206,6 +208,24 @@ M.open_popup_window = function(title, size, pos)
         title_pos = 'center',
     })
     return wid, bufnr
+end
+
+--- Hide the cursor (...and save the original settings)
+M.hide_cursor = function()
+    vim.g.saved_cursor_blend = vim.api.nvim_get_hl(0, { name = "Cursor" }).blend
+    vim.g.saved_guicursor = vim.o.guicursor
+    vim.cmd([[hi Cursor blend=100]])
+    vim.cmd([[set guicursor+=a:Cursor/lCursor]])
+end
+
+--- Show the cursor (...by restoring the original settings)
+M.show_cursor = function()
+    if vim.g.saved_cursor_blend ~= nil then
+        vim.cmd([[hi Cursor blend=vim.g.saved_cursor_blend]])
+    end
+    if vim.g.saved_guicursor ~= nil then
+        vim.o.guicursor = vim.g.saved_guicursor
+    end
 end
 
 --- Pad string to the right with spaces to the given length

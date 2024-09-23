@@ -124,6 +124,25 @@ local M = {
     }
 }
 
+--- Get the index of a category in the categories list.
+--- @param category string The category to get the index of.
+--- @return number? The index of the category in the categories list or `nil` if not found.
+M.get_category_index = function(category)
+    for i, v in ipairs(M.options.categories) do
+        if v == category then
+            return i
+        end
+    end
+    return nil
+end
+
+--- Get the category at the given index.
+--- @param index number The index of the category to get.
+--- @return string The category at the given index or the default category if the index is out of bounds.
+M.get_category = function(index)
+    return M.options.categories[index] or M.options.default_category
+end
+
 --- Setup the configuration options for the quick-kanban plugin.
 --- @param options table? Configuration options for the quick-kanban plugin.
 function M.setup(options)
