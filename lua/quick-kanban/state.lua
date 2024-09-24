@@ -65,7 +65,10 @@ end
 --- @param category string The name of the category
 --- @return integer? wid Window id for the given category, or nil if the category does not exist
 M.get_wid_for_category = function(category)
-    return M.windows[category] and M.windows[category].id or nil
+    if M.windows[category] == nil or M.windows[category].id == nil then
+        return nil
+    end
+    return vim.api.nvim_win_is_valid(M.windows[category].id) and M.windows[category].id or nil
 end
 
 --- Set the window id for the given category
@@ -121,5 +124,17 @@ M.is_item_selected = function()
     return M.selected_item_id ~= nil
 end
 
+--- Check that all windows are valid if the Kanban UI is open
+--- @return boolean `true` if all windows are valid, `false` otherwise
+M.check_windows_validity = function()
+    if M.is_open then
+        for _, win in pairs(M.windows) do
+            if win == nil or not vim.api.nvim_win_is_valid(win.id or -1) then
+                return false
+            end
+        end
+    end
+    return true
+end
 
 return M

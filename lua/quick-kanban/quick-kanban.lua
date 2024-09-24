@@ -51,6 +51,20 @@ vim.api.nvim_create_autocmd('WinLeave', {
     end
 })
 
+-- Create an autocommand for the WinClosed event
+vim.api.nvim_create_autocmd("WinClosed", {
+    group = vim.api.nvim_create_augroup("MonitorWinClosed", { clear = true }),
+    callback = function()
+        if M == nil or M.state == nil or M.state.check_windows_validity == nil then
+            return
+        end
+
+        if not M.state.check_windows_validity() then
+            M.close_ui()
+        end
+    end
+})
+
 -------------------------------------------------------------------------------
 --- Local Helper functions
 -------------------------------------------------------------------------------
@@ -117,6 +131,7 @@ end
 
 --- Set the focus to the category at the given index
 --- @param index number The index of the category to focus
+--- @return boolean `true` if the category was focused
 local set_category_focus = function(index)
     local cur_category = M.state.selected_category
     local new_category = nil
@@ -126,7 +141,7 @@ local set_category_focus = function(index)
         if M.state.selected_item_id ~= nil then
             M.archive_selected_item()
             M.toggle_selected_item()
-            return
+            return false
         else
             new_category = ARCHIVE_KEY
         end
@@ -143,14 +158,17 @@ local set_category_focus = function(index)
         utils.log.error("Invalid argument(s): "
             .. "cur_category=" .. (cur_cateogry or "nil") .. "; "
             .. "new_cateogory=" .. (new_category or "nil"))
-        return
+        M.close_ui()
+        return false
     end
 
     local cur_wid = M.state.get_wid_for_category(cur_category)
     local new_wid = M.state.get_wid_for_category(new_category)
     if new_wid == nil or cur_wid == nil then
-        utils.log.error("Unexpected error: " .. "cur_wid=" .. cur_wid .. "; " .. "new_wid=" .. new_wid)
-        return
+        utils.log.error("Unexpected error: " ..
+            "cur_wid=" .. (cur_wid or "nil") .. "; " .. "new_wid=" .. (new_wid or "nil"))
+        M.close_ui()
+        return false
     end
 
     -- Set the window hilight groups
@@ -173,6 +191,8 @@ local set_category_focus = function(index)
     else
         M.set_current_buffer_line_focus(M.state.get_selected_line_for_category(new_category))
     end
+
+    return true
 end
 
 --- Set the focus to the line number in the current window/buffer
@@ -181,6 +201,7 @@ M.set_current_buffer_line_focus = function(line_num)
     local cur_wid = M.state.get_current_wid()
     if cur_wid == nil then
         utils.log.error("Failed to set item focus; Active window not found")
+        M.close_ui()
         return
     end
 
@@ -190,12 +211,14 @@ M.set_current_buffer_line_focus = function(line_num)
     if cur_idx == line_num then
         return
     end
+
     -- If an item is currently selected, move it to new index
     if M.state.is_item_selected() then
         if data.move_item_within_category(M.state.selected_item_id, line_num - cur_idx) then
             reload_buffer_for_category(M.state.selected_category)
         else
             utils.log.error("Failed to move item; ID=" .. M.state.selected_item_id .. "; Index=" .. line_num)
+            M.close_ui()
             return
         end
     end
@@ -323,8 +346,9 @@ M.next_category = function()
 
     for i, category in ipairs(M.config.options.categories) do
         if category == M.state.selected_category then
-            set_category_focus(i + 1)
-            M.update_preview(nil, false)
+            if set_category_focus(i + 1) then
+                M.update_preview(nil, false)
+            end
             return
         end
     end
@@ -333,13 +357,15 @@ end
 --- Move focus to the previous category
 M.prev_category = function()
     if M.state.selected_category == ARCHIVE_KEY then
-        set_category_focus(#M.config.options.categories)
-        M.update_preview(nil, false)
+        if set_category_focus(#M.config.options.categories) then
+            M.update_preview(nil, false)
+        end
     else
         for i, category in ipairs(M.config.options.categories) do
             if category == M.state.selected_category then
-                set_category_focus(i - 1)
-                M.update_preview(nil, false)
+                if set_category_focus(i - 1) then
+                    M.update_preview(nil, false)
+                end
                 return
             end
         end
@@ -566,6 +592,7 @@ M.toggle_selected_item = function()
     local wid = M.state.get_current_wid()
     if wid == nil then
         utils.log.error("Cannot select item; Active window not found")
+        M.close_ui()
         return
     end
 
@@ -579,6 +606,7 @@ M.open_selected_item = function()
     local item = data.items[M.state.get_current_item_id() or -1]
     if item == nil then
         utils.log.error("Failed to open item: item=nil")
+        M.close_ui()
         return
     end
 
@@ -701,6 +729,7 @@ M.update_preview = function(item, edit_mode)
     local wid = M.state.get_wid_for_category(PREVIEW_KEY)
     if wid == nil then
         utils.log.error("Failed to update preview; Preview window not found")
+        M.close_ui()
         return
     end
 
@@ -745,6 +774,7 @@ M.show_help_text = function()
     local win = M.state.get_window(PREVIEW_KEY)
     if win == nil or win.id == nil or win.bufnr == nil then
         utils.log.error("Failed to show help text; Preview window not found")
+        M.close_ui()
         return
     end
     vim.api.nvim_win_set_buf(win.id, win.bufnr)
@@ -797,6 +827,7 @@ M.end_editing = function()
     local wid = vim.api.nvim_get_current_win()
     if M.state.get_wid_for_category(PREVIEW_KEY) ~= wid then
         utils.log.error("Not in edit mode")
+        M.close_ui()
         return
     end
     vim.api.nvim_win_set_hl_ns(wid, WIN_HILIGHT_INACTIVE)
@@ -808,7 +839,7 @@ M.end_editing = function()
     local window = M.state.get_window(M.state.selected_category)
     if window == nil then
         utils.log.error("Failed to end editing; Active window not found")
-        close_ui()
+        M.close_ui()
         return
     end
 
