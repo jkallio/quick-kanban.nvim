@@ -598,6 +598,9 @@ M.add_item = function()
 
     data.add_item(M.config.options.default_category, input)
     reload_buffer_for_category(M.config.options.default_category)
+
+    set_category_focus(M.config.get_category_index(M.config.options.default_category) or 1)
+    M.set_current_buffer_line_focus(1)
 end
 
 --- Rename the current item
