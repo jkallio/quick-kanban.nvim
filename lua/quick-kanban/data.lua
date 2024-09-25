@@ -7,31 +7,23 @@ local M = {
     --- @type table
     opts = {},
 
-    --- Struct of parameters for the metadata of the kanban board
-    --- @type table
-    metadata = {},
-
     --- Dictionary of items where the key is the item.id
     --- @type table Dictionary <number, table>
     items = {},
+
+    --- The metadata for the kanban board
+    --- @type table
+    metadata = {}
 }
 
 --- Setup the data module with the specified options.
 --- @param opts table The configuration options
-M.setup = function(opts)
+M.setup = function(opts, metadata)
     M.opts = opts
+    M.metadata = metadata
     if utils.directory_exists(M.opts.path) then
-        M.reload_kanban_meta_file()
         M.reload_item_files()
     end
-end
-
---- Get the next item id from the item id pool and increment the id counter in the metadata file.
---- @return number The next item id
-M.next_item_id = function()
-    M.metadata.id = M.metadata.id + 1
-    M.save_kanban_metadata()
-    return M.metadata.id
 end
 
 --- Get the items for the specified category.
@@ -146,28 +138,6 @@ M.move_item_within_category = function(item_id, increment)
     return true
 end
 
---- Reload the kanban metadata file
---- @return boolean true if the metadata was reloaded successfully, false otherwise
-M.reload_kanban_meta_file = function()
-    local metadata_path = utils.concat_paths(M.opts.path, ".metadata.json")
-    if not utils.file_exists(metadata_path) then
-        local meta_defaults = {
-            id = 0
-        }
-        utils.write_to_file(metadata_path, vim.fn.json_encode(meta_defaults))
-        utils.log.info("Quick Kanban meta file initialized.")
-    end
-    local lines = utils.read_file_contents(metadata_path)
-    M.metadata = vim.fn.json_decode(lines)
-    return true
-end
-
---- Save the metadata to the metadata file
-M.save_kanban_metadata = function()
-    local path = utils.concat_paths(M.opts.path, ".metadata.json")
-    utils.write_to_file(path, vim.fn.json_encode(M.metadata))
-end
-
 --- Reload the data items from the files in the configured path.
 --- @return boolean true if the items were reloaded successfully, false otherwise
 M.reload_item_files = function()
@@ -231,7 +201,7 @@ M.add_item = function(category, title)
     end
 
     local item = {
-        id = M.next_item_id(),
+        id = M.metadata.next_id(),
         title = title,
         category = category,
         order = 1,

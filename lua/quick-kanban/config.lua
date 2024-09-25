@@ -16,17 +16,13 @@ local M = {
             attachments = ".attachments", -- Directory for the attachments
         },
 
-        --- A list of categories representing the different stages in the kanban board.
+        --- A list of categories for the default kanban board.
         --- @type table
-        categories = {
+        default_categories = {
             'Backlog',
             'In Progress',
             'Done',
         },
-
-        --- Default category for the new items.
-        --- @type string
-        default_category = "Backlog",
 
         --- The key mappings for interacting with the windows in the kanban board.
         --- @type table
@@ -123,25 +119,6 @@ local M = {
         show_archive = false,
     }
 }
-
---- Get the index of a category in the categories list.
---- @param category string The category to get the index of.
---- @return number? The index of the category in the categories list or `nil` if not found.
-M.get_category_index = function(category)
-    for i, v in ipairs(M.options.categories) do
-        if v == category then
-            return i
-        end
-    end
-    return nil
-end
-
---- Get the category at the given index.
---- @param index number The index of the category to get.
---- @return string The category at the given index or the default category if the index is out of bounds.
-M.get_category = function(index)
-    return M.options.categories[index] or M.options.default_category
-end
 
 --- Setup the configuration options for the quick-kanban plugin.
 --- @param options table? Configuration options for the quick-kanban plugin.

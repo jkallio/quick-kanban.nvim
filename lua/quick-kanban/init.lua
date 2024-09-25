@@ -1,4 +1,5 @@
 local qkb = require('quick-kanban.quick-kanban')
+local config = require('quick-kanban.config')
 
 --- Public interface
 local M = {}
@@ -6,9 +7,8 @@ local M = {}
 --- Setup function should be called once before using any other functions in the plugin.
 --- @param options? table Options to configure the plugin [optional]
 M.setup = function(options)
-    local config = require('quick-kanban.config')
     config.setup(options)
-    qkb.setup(config)
+    qkb.setup(config.options)
 end
 
 --- Open the kanban board UI

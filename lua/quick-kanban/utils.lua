@@ -3,6 +3,9 @@ vim.g.quick_kanban_debug = true
 
 local M = {}
 
+---
+--- TODO: Move this to a separate module
+---
 --- Initialize the plenary logger
 M.log = logger.new({
     plugin = 'quick-kanban',
@@ -81,7 +84,7 @@ end
 --- @return string[] The contents of the file
 M.read_file_contents = function(path)
     if path == nil then
-        M.log.error('Invalid path: ' .. path)
+        M.log.error('Invalid path')
         return {}
     end
 
@@ -105,7 +108,7 @@ end
 --- @return boolean True if the file was written successfully, false otherwise
 M.write_to_file = function(path, content)
     if path == nil then
-        M.log.error('Invalid path: ' .. path)
+        M.log.error('Invalid path')
         return false
     end
 

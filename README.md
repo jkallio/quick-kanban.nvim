@@ -25,7 +25,7 @@ The plugin creates `.quick-kanban` hidden folder inside your current project dir
 - [x] Item editing directly in the Kanban UI
 - [ ] Multi-selecting items.
 - [ ] Use single global path for storing all the kanban boards.
-- [ ] Integrate with Obsidian Kanban format
+- [ ] Integrate with [Obsidian Kanban](https://github.com/mgmeyers/obsidian-kanban) plugin format.
 
 ## Folder structure
 
