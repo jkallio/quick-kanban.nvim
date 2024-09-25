@@ -24,7 +24,7 @@ local M = {
             'Done',
         },
 
-        --- Default categiry to add new items
+        --- Default category for the new items.
         --- @type string
         default_category = "Backlog",
 
@@ -50,16 +50,16 @@ local M = {
             quit = { keys = { 'q', '<esc>' }, desc = "Quit" },
         },
 
-        --- The window configuration for the kanban board.
+        --- The window configuration for the kanban board
         --- @type table
         window = {
-            --- The width of the kanban board window.
+            --- The width of each kanban category window
             --- @type number
             width = 40,
 
-            --- The height of the kanban board window.
+            --- The height of the kanban UI
             --- @type number
-            height = 40,
+            height = 30,
 
             --- Window title decoration (prefix and suffix)
             --- @type table
@@ -97,7 +97,7 @@ local M = {
             --- @type string
             active_text_fg = "#000000",
 
-            --- The sellected text background
+            --- The selected text background
             --- @type string
             selected_text_bg = "#888844",
 
@@ -118,7 +118,7 @@ local M = {
         --- @type boolean
         show_preview = true,
 
-        --- Show the archive category
+        --- Show the archive window
         --- @type boolean
         show_archive = false,
     }
