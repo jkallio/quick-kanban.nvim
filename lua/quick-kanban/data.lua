@@ -13,13 +13,18 @@ local M = {
 
     --- The metadata for the kanban board
     --- @type table
-    metadata = {}
+    metadata = {},
+
+    --- Logger instance
+    --- @type table
+    log = {}
 }
 
 --- Setup the data module with the specified options.
 --- @param opts table The configuration options
-M.setup = function(opts, metadata)
+M.setup = function(opts, metadata, log)
     M.opts = opts
+    M.log = log
     M.metadata = metadata
     if utils.directory_exists(M.opts.path) then
         M.reload_item_files()
@@ -61,7 +66,7 @@ M.get_archived_items = function()
                 local item = vim.fn.json_decode(utils.read_file_contents(file_path))
                 table.insert(items, item)
             else
-                utils.log.error("File not found: " .. file_path)
+                M.log.error("File not found: " .. file_path)
             end
         end
     end
@@ -91,14 +96,14 @@ end
 M.move_item_to_category = function(item_id, category)
     local item = M.items[item_id]
     if item == nil or category == nil then
-        utils.log.error("Invalid argument(s): "
+        M.log.error("Invalid argument(s): "
             .. "item_id=" .. (item_id or "nil") .. "; "
             .. "category=" .. (category or "nil"))
         return false
     end
 
     if item.category == category then
-        utils.log.warn("Item [" .. item.id .. "] already in category " .. category)
+        M.log.warn("Item [" .. item.id .. "] already in category " .. category)
         return false
     end
 
@@ -115,7 +120,7 @@ end
 M.move_item_within_category = function(item_id, increment)
     local item = M.items[item_id]
     if item == nil then
-        utils.log.error("Invalid argument: item_id=" .. (item_id or "nil"))
+        M.log.error("Invalid argument: item_id=" .. (item_id or "nil"))
         return false
     end
 
@@ -143,7 +148,7 @@ end
 M.reload_item_files = function()
     local items_path = utils.concat_paths(M.opts.path, M.opts.subdirectories.items)
     if not utils.directory_exists(items_path) then
-        utils.log.error("Invalid configuration: Items subdirectory not found")
+        M.log.error("Invalid configuration: Items subdirectory not found")
         return false
     end
 
@@ -155,7 +160,7 @@ M.reload_item_files = function()
             local item = vim.fn.json_decode(utils.read_file_contents(file_path))
             M.items[item.id] = item
         else
-            utils.log.error("File not found: " .. file_path)
+            M.log.error("File not found: " .. file_path)
         end
     end
     return true
@@ -174,12 +179,12 @@ end
 --- @return boolean True if the attachment was created successfully, false otherwise
 M.create_attachment = function(item)
     if item == nil then
-        utils.log.error("Invalid argument; item=nil")
+        M.log.error("Invalid argument; item=nil")
         return false
     end
 
     if item.attachment_path ~= nil then
-        utils.log.error("Item already has an attachment: " .. item.attachment_path)
+        M.log.error("Item already has an attachment: " .. item.attachment_path)
         return false;
     end
     item.attachment_path = utils.concat_paths(M.opts.path, M.opts.subdirectories.attachments, item.id .. '.md')
@@ -218,7 +223,7 @@ end
 M.archive_item = function(item_id)
     local item = M.items[item_id]
     if item == nil then
-        utils.log.error("Failed to archive item: Item id [" .. item_id .. "] not found!")
+        M.log.error("Failed to archive item: Item id [" .. item_id .. "] not found!")
         return nil
     end
 

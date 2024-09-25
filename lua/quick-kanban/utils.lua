@@ -1,16 +1,4 @@
-local logger = require('plenary.log')
-vim.g.quick_kanban_debug = true
-
 local M = {}
-
----
---- TODO: Move this to a separate module
----
---- Initialize the plenary logger
-M.log = logger.new({
-    plugin = 'quick-kanban',
-    level = 'info',
-})
 
 --- Returns the path for the current working directory
 M.get_working_directory_path = function()
@@ -38,45 +26,41 @@ end
 
 --- Creates a file in the given path if it doesn't exist
 --- @param path string The path to the file
+--- @return boolean True if the file was created successfully, false otherwise
 M.touch_file = function(path)
     if M.file_exists(path) then
-        return
+        return false
     end
 
     local file = io.open(path, 'w')
-    if file ~= nil then
-        M.log.info('Created file: ' .. path)
-        file:close()
-        return
+    if not file then
+        return false
     end
-    M.log.error('Failed to touch file: ' .. path)
+
+    file:close()
+    return true
 end
 
 --- Move a file from one directory to another
 --- @param source string The source path of the file
 --- @param destination string The destination path of the file
+--- @return boolean True if the file was moved successfully, false otherwise
 M.move_file = function(source, destination)
     if not M.file_exists(source) then
-        M.log.error('Source file does not exist: ' .. source)
-        return
+        return false
     end
-
     M.touch_directory(vim.fn.fnamemodify(destination, ':h'))
-    if vim.fn.rename(source, destination) ~= 0 then
-        M.log.error('Failed to move file: ' .. source .. ' -> ' .. destination)
-    end
+    return vim.fn.rename(source, destination) == 0
 end
 
 --- Create a directory in the given path if it doesn't exist
 --- @param path string The path to the directory
+--- @return boolean True if the directory was created successfully, false otherwise
 M.touch_directory = function(path)
-    if not M.directory_exists(path) then
-        if vim.fn.mkdir(path, 'p') == 0 then
-            M.log.error('Failed to create directory: ' .. path)
-            return
-        end
-        M.log.info('Directory created: ' .. path)
+    if M.directory_exists(path) then
+        return true
     end
+    return vim.fn.mkdir(path, 'p') ~= 0
 end
 
 --- Read file contents into a table
@@ -84,22 +68,20 @@ end
 --- @return string[] The contents of the file
 M.read_file_contents = function(path)
     if path == nil then
-        M.log.error('Invalid path')
         return {}
     end
 
     local file = io.open(path, 'r')
     if file == nil then
-        M.log.error('Failed to open file: ' .. path)
         return {}
     end
 
-    local contents = {}
+    local lines = {}
     for line in file:lines() do
-        table.insert(contents, line)
+        table.insert(lines, line)
     end
     file:close()
-    return contents
+    return lines
 end
 
 --- Write given string to a file
@@ -108,13 +90,11 @@ end
 --- @return boolean True if the file was written successfully, false otherwise
 M.write_to_file = function(path, content)
     if path == nil then
-        M.log.error('Invalid path')
         return false
     end
 
     local file = io.open(path, 'w')
-    if file == nil then
-        M.log.error('Failed to open file: ' .. path)
+    if not file then
         return false
     end
 
@@ -125,58 +105,26 @@ end
 
 --- Delete the given file
 --- @param path string The path to the file
+--- @return boolean True if the file was deleted successfully, false otherwise
 M.delete_file = function(path)
     if path == nil then
-        M.log.error('Invalid path: ' .. path)
-        return
+        return false
     end
-
-    if vim.fn.delete(path) ~= 0 then
-        M.log.error('Failed to delete file: ' .. path)
-        return
-    end
-end
-
---- Write the given contents to a file
---- @param path string The path to the file
---- @param lines string[] The contents to write to the file
-M.write_lines_to_file = function(path, lines)
-    if path == nil then
-        M.log.error('Invalid path: ' .. path)
-        return
-    end
-
-    local file = io.open(path, 'w')
-    if file == nil then
-        M.log.error('Failed to open file: ' .. path)
-        return
-    end
-
-    for _, line in ipairs(lines) do
-        if line ~= nil and #line > 0 then
-            if line:sub(-1) == '\n' then
-                file:write(line)
-            else
-                file:write(line .. '\n')
-            end
-        end
-    end
-    file:close()
+    return vim.fn.delete(path) == 0
 end
 
 --- Append file with the given rows
 --- @param path string The path to the file
 --- @param lines string[] The rows to append to the file
+--- @return boolean True if the file was appended successfully, false otherwise
 M.append_file = function(path, lines)
     if path == nil then
-        M.log.error('Invalid path: ' .. path)
-        return
+        return false
     end
 
     local file = io.open(path, 'a')
-    if file == nil then
-        M.log.error('Failed to open file: ' .. path)
-        return
+    if not file then
+        return false
     end
 
     for _, line in ipairs(lines) do
@@ -189,6 +137,7 @@ M.append_file = function(path, lines)
         end
     end
     file:close()
+    return true
 end
 
 --- Check if the given string starts with the given start string
@@ -268,7 +217,6 @@ M.trim = function(str)
     return str:match("^%s*(.-)%s*$") or ""
 end
 
-
 --- Configure the keymaps for the given buffer. The keymaps can be either...
 --- - A single keymap string (e.g. '<leader>q')
 --- - A table of keymaps (e.g. { keys = {'<esc>', '<leader>q'}, desc = 'Quit' })
@@ -277,9 +225,9 @@ end
 --- @param cmd string The command to execute
 M.set_keymap = function(bufnr, keymap, cmd)
     if bufnr == nil or cmd == nil or keymap == nil then
-        utils.log.error("Invalid args!")
         return
     end
+
     if type(keymap) == "string" then
         vim.api.nvim_buf_set_keymap(bufnr, 'n', keymap, cmd, { noremap = true, silent = true })
     elseif type(keymap) == "table" then

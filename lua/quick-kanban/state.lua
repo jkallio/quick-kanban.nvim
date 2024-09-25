@@ -1,5 +1,3 @@
-local utils = require('quick-kanban.utils')
-
 local M = {
     --- Options for the Kanban UI
     --- @type table
@@ -23,11 +21,16 @@ local M = {
 
     --- Window information for each Kanban category
     --- @type table where the key is the name of the category from opts.categories
-    windows = {}
+    windows = {},
+
+    --- The logger object
+    --- @type table
+    log = {}
 }
 
-M.setup = function(opts)
+M.setup = function(opts, log)
     M.opts = opts
+    M.log = log
 end
 
 --- Get the window table for the given category
@@ -35,7 +38,7 @@ end
 --- @return table? The window table for the category (or `nil` if the category does not exist)
 M.get_window = function(category)
     if category == nil then
-        utils.log.error("Invalid category: " .. category)
+        M.log.error("Invalid category: " .. category)
         return nil
     end
     return M.windows[category]
@@ -76,7 +79,7 @@ end
 --- @param wid integer? The window id
 M.set_wid_for_category = function(category, wid)
     if M.windows[category] == nil then
-        utils.log.warn("Category not found: " .. category)
+        M.log.warn("Category not found: " .. category)
         M.windows[category] = {}
     end
     M.windows[category].id = wid
@@ -87,7 +90,7 @@ end
 --- @param bufnr integer? The buffer number
 M.set_buf_for_category = function(category, bufnr)
     if M.windows[category] == nil then
-        utils.log.warn("Category not found: " .. category)
+        M.log.warn("Category not found: " .. category)
         M.windows[category] = {}
     end
     M.windows[category].bufnr = bufnr
@@ -112,7 +115,7 @@ end
 --- @param line integer The selected line
 M.set_selected_line_for_category = function(category, line)
     if M.windows[category] == nil then
-        utils.log.warn("Category not found: " .. category)
+        M.log.warn("Category not found: " .. category)
         M.windows[category] = {}
     end
     M.windows[category].selected_line = line

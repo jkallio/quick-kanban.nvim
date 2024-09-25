@@ -9,6 +9,10 @@ local M = {
     --- Configuration options
     --- @type table
     opts = {},
+
+    --- Logger instance
+    --- @type table
+    log = {}
 }
 
 --- The metadata JSON object
@@ -28,8 +32,9 @@ M.json = {
 
 --- Setup the metadata module
 --- @param opts table The configuration options for the metadata module
-M.setup = function(opts)
+M.setup = function(opts, log)
     M.opts = opts
+    M.log = log
     M.path = utils.concat_paths(M.opts.path, '.metadata.json')
     if utils.file_exists(M.path) then
         M.reload_from_file()
@@ -79,14 +84,14 @@ M.reload_from_file = function()
     if ok and json ~= nil then
         M.json = json
     else
-        utils.log.error('Failed to decode JSON file: ' .. M.path)
+        M.log.error('Failed to decode JSON file: ' .. M.path)
     end
 end
 
 --- Save the metadata to the file
 M.save_to_file = function()
     if not utils.write_to_file(M.path, vim.fn.json_encode(M.json)) then
-        utils.log.error('Failed to save metadata to file: ' .. M.path)
+        M.log.error('Failed to save metadata to file: ' .. M.path)
     end
 end
 

@@ -8,6 +8,10 @@ local M = {
         --- @type string
         path = utils.concat_paths(utils.get_working_directory_path(), ".quick-kanban"),
 
+        --- Log level for the plugin (debug, info, warn, error, nil)
+        --- @type string
+        log_level = "info",
+
         --- Subdirectories for different files in the kanban board.
         --- @type table
         subdirectories = {
@@ -104,7 +108,7 @@ local M = {
 
         --- Show line numbers
         --- @type boolean
-        number = false,
+        number = true,
 
         --- Wrap lines
         --- @type boolean

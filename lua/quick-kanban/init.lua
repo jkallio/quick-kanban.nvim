@@ -1,14 +1,31 @@
+local logger = require('plenary.log')
 local qkb = require('quick-kanban.quick-kanban')
 local config = require('quick-kanban.config')
 
 --- Public interface
 local M = {}
 
+--- Logger instance
+M.log = {
+    debug = function() end,
+    info = function() end,
+    warn = function() end,
+    error = function() end,
+}
+
 --- Setup function should be called once before using any other functions in the plugin.
 --- @param options? table Options to configure the plugin [optional]
 M.setup = function(options)
     config.setup(options)
-    qkb.setup(config.options)
+
+    if config.options.log_level then
+        M.log = logger.new({
+            plugin = 'quick-kanban',
+            level = config.options.log_level,
+        })
+    end
+
+    qkb.setup(config.options, M.log)
 end
 
 --- Open the kanban board UI

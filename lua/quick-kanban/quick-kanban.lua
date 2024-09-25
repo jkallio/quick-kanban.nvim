@@ -24,6 +24,10 @@ local M = {
     --- The metadata module for the plugin
     --- @type table
     metadata = {},
+
+    --- Logger instance
+    --- @type table
+    log = {},
 }
 
 -------------------------------------------------------------------------------
@@ -163,7 +167,7 @@ local set_category_focus = function(index)
     end
 
     if cur_category == nil or new_category == nil then
-        utils.log.error("Invalid argument(s): "
+        M.log.error("Invalid argument(s): "
             .. "cur_category=" .. (cur_cateogry or "nil") .. "; "
             .. "new_cateogory=" .. (new_category or "nil"))
         M.close_ui()
@@ -173,7 +177,7 @@ local set_category_focus = function(index)
     local cur_wid = M.state.get_wid_for_category(cur_category)
     local new_wid = M.state.get_wid_for_category(new_category)
     if new_wid == nil or cur_wid == nil then
-        utils.log.error("Unexpected error: " ..
+        M.log.error("Unexpected error: " ..
             "cur_wid=" .. (cur_wid or "nil") .. "; " .. "new_wid=" .. (new_wid or "nil"))
         M.close_ui()
         return false
@@ -208,7 +212,7 @@ end
 M.set_current_buffer_line_focus = function(line_num)
     local cur_wid = M.state.get_current_wid()
     if cur_wid == nil then
-        utils.log.error("Failed to set item focus; Active window not found")
+        M.log.error("Failed to set item focus; Active window not found")
         M.close_ui()
         return
     end
@@ -225,7 +229,7 @@ M.set_current_buffer_line_focus = function(line_num)
         if M.data.move_item_within_category(M.state.selected_item_id, line_num - cur_idx) then
             reload_buffer_for_category(M.state.selected_category)
         else
-            utils.log.error("Failed to move item; ID=" .. M.state.selected_item_id .. "; Index=" .. line_num)
+            M.log.error("Failed to move item; ID=" .. M.state.selected_item_id .. "; Index=" .. line_num)
             M.close_ui()
             return
         end
@@ -246,7 +250,7 @@ local get_help_text_lines = function(keymaps)
     local rows = vim.fn.floor(M.opts.window.height / 2) - 7
     for _, keymap in pairs(keymaps) do
         if keymap.keys == nil or keymap.desc == nil then
-            utils.log.warn("Invalid keymap: " .. vim.inspect(keymap))
+            M.log.warn("Invalid keymap: " .. vim.inspect(keymap))
             return lines
         end
 
@@ -294,17 +298,18 @@ end
 
 --- Setup the plugin with the given options
 --- @param options table The config table to configure the plugin
-M.setup = function(options)
+M.setup = function(options, log)
     M.opts = options
+    M.log = log
 
     M.state = require('quick-kanban.state')
-    M.state.setup(M.opts)
+    M.state.setup(M.opts, M.log)
 
     M.metadata = require('quick-kanban.metadata')
-    M.metadata.setup(M.opts)
+    M.metadata.setup(M.opts, M.log)
 
     M.data = require('quick-kanban.data')
-    M.data.setup(M.opts, M.metadata)
+    M.data.setup(M.opts, M.metadata, M.log)
 
     M.state.selected_view = KANBAN_KEY
     M.state.selected_category = M.metadata.json.default_category
@@ -421,7 +426,7 @@ M.open_ui = function()
         vim.api.nvim_set_option_value('relativenumber', false, { win = wid })
         vim.api.nvim_set_option_value('cursorline', true, { win = wid })
         vim.api.nvim_set_option_value('cursorlineopt', 'both', { win = wid })
-        vim.api.nvim_set_option_value('number', opts.number, { win = wid })
+        vim.api.nvim_set_option_value('number', false, { win = wid })
         vim.api.nvim_set_option_value('winblend', opts.window.blend, { win = wid })
         vim.api.nvim_set_option_value('wrap', opts.wrap, { win = wid })
         vim.api.nvim_set_option_value('linebreak', opts.wrap, { win = wid })
@@ -525,7 +530,6 @@ M.open_ui = function()
         vim.api.nvim_set_option_value('modifiable', false, { buf = bufnr })
 
         -- Set the window options
-        vim.api.nvim_set_option_value('number', false, { win = wid })
         vim.api.nvim_set_option_value('winblend', M.opts.window.blend, { win = wid })
         vim.api.nvim_set_option_value('wrap', false, { win = wid })
         vim.api.nvim_set_option_value('linebreak', false, { win = wid })
@@ -602,7 +606,7 @@ M.toggle_selected_item = function()
 
     local wid = M.state.get_current_wid()
     if wid == nil then
-        utils.log.error("Cannot select item; Active window not found")
+        M.log.error("Cannot select item; Active window not found")
         M.close_ui()
         return
     end
@@ -616,7 +620,7 @@ end
 M.open_selected_item = function()
     local item = M.data.items[M.state.get_current_item_id() or -1]
     if item == nil then
-        utils.log.error("Failed to open item: item=nil")
+        M.log.error("Failed to open item: item=nil")
         M.close_ui()
         return
     end
@@ -646,7 +650,7 @@ end
 M.rename_item = function()
     local item = M.data.items[M.state.get_current_item_id() or -1]
     if item == nil then
-        utils.log.error("Failed to rename item: item=nil")
+        M.log.error("Failed to rename item: item=nil")
         return
     end
 
@@ -663,7 +667,7 @@ end
 M.archive_selected_item = function()
     local item = M.data.items[M.state.get_current_item_id() or -1]
     if item == nil then
-        utils.log.error("Failed to archive item: item=nil")
+        M.log.error("Failed to archive item: item=nil")
         return false
     end
 
@@ -682,13 +686,13 @@ end
 -- @return boolean `true` if the item was unarchived
 M.unarchive_selected_item = function()
     if M.state.selected_category ~= ARCHIVE_KEY then
-        utils.log.warn("Cannot unarchive item")
+        M.log.warn("Cannot unarchive item")
         return false
     end
 
     local item = M.data.unarchive_item(M.state.get_current_item_id() or -1)
     if item == nil then
-        utils.log.error("Failed to unarchive item: item=nil")
+        M.log.error("Failed to unarchive item: item=nil")
         return false
     end
 
@@ -702,7 +706,7 @@ end
 M.delete_selected_item = function()
     local item = M.data.get_item(M.state.get_current_item_id() or -1)
     if item == nil then
-        utils.log.error("Failed to delete item: item=nil")
+        M.log.error("Failed to delete item: item=nil")
         return false
     end
 
@@ -739,7 +743,7 @@ M.update_preview = function(item, edit_mode)
     M.state.preview_item_id = item.id
     local wid = M.state.get_wid_for_category(PREVIEW_KEY)
     if wid == nil then
-        utils.log.error("Failed to update preview; Preview window not found")
+        M.log.error("Failed to update preview; Preview window not found")
         M.close_ui()
         return
     end
@@ -763,6 +767,7 @@ M.update_preview = function(item, edit_mode)
     vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
     vim.api.nvim_set_option_value('buflisted', false, { buf = bufnr })
     vim.api.nvim_set_option_value('winblend', M.opts.window.blend, { win = wid })
+    vim.api.nvim_set_option_value('number', M.opts.number, { win = wid })
     utils.set_keymap(bufnr, M.opts.keymaps.end_editing, ':lua require("quick-kanban").end_editing()<cr>')
 
     if edit_mode then
@@ -784,7 +789,7 @@ M.show_help_text = function()
 
     local win = M.state.get_window(PREVIEW_KEY)
     if win == nil or win.id == nil or win.bufnr == nil then
-        utils.log.error("Failed to show help text; Preview window not found")
+        M.log.error("Failed to show help text; Preview window not found")
         M.close_ui()
         return
     end
@@ -811,7 +816,7 @@ end
 --- Edit the attachment of the selected item directly in the preview window
 M.edit_item = function()
     if M.state.selected_category == ARCHIVE_KEY then
-        utils.log.warn("Cannot edit archived items")
+        M.log.warn("Cannot edit archived items")
         return
     end
 
@@ -837,7 +842,7 @@ end
 M.end_editing = function()
     local wid = vim.api.nvim_get_current_win()
     if M.state.get_wid_for_category(PREVIEW_KEY) ~= wid then
-        utils.log.error("Not in edit mode")
+        M.log.error("Not in edit mode")
         M.close_ui()
         return
     end
@@ -849,7 +854,7 @@ M.end_editing = function()
 
     local window = M.state.get_window(M.state.selected_category)
     if window == nil then
-        utils.log.error("Failed to end editing; Active window not found")
+        M.log.error("Failed to end editing; Active window not found")
         M.close_ui()
         return
     end
