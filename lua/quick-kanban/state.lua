@@ -1,6 +1,7 @@
+--- @class quick-kanban.state
 local M = {
     --- Options for the Kanban UI
-    --- @type table
+    --- @type quick-kanban.config.options
     opts = {},
 
     --- This variable is `true` if Kanban UI is open
@@ -28,7 +29,10 @@ local M = {
     log = {}
 }
 
-M.setup = function(opts, log)
+--- Initialize the state module
+--- @param opts quick-kanban.config.options The options for the Kanban UI
+--- @param log table The logger object
+M.init = function(opts, log)
     M.opts = opts
     M.log = log
 end

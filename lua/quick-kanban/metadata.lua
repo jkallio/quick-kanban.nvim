@@ -1,6 +1,4 @@
-local utils = require('quick-kanban.utils')
-
---- Metadata module for the quick-kanban plugin
+--- @class quick-kanban.metadata
 local M = {
     --- The path to the metadata file
     --- @type string
@@ -12,10 +10,15 @@ local M = {
 
     --- Logger instance
     --- @type table
-    log = {}
+    log = {},
+
+    --- Common utilities
+    --- @type quick-kanban.utils
+    utils = {}
 }
 
 --- The metadata JSON object
+--- @class quick-kanban.metadata.json
 M.json = {
     --- The ID pool for the items
     --- @type number
@@ -30,13 +33,14 @@ M.json = {
     default_category = ""
 }
 
---- Setup the metadata module
---- @param opts table The configuration options for the metadata module
-M.setup = function(opts, log)
+--- Initialize the metadata module
+--- @param opts quick-kanban.config.options The configuration options for the metadata module
+M.init = function(opts, log)
     M.opts = opts
     M.log = log
-    M.path = utils.concat_paths(M.opts.path, '.metadata.json')
-    if utils.file_exists(M.path) then
+    M.utils = require('quick-kanban.utils')
+    M.path = M.utils.concat_paths(M.opts.path, '.metadata.json')
+    if M.utils.file_exists(M.path) then
         M.reload_from_file()
     else
         M.json.id = 0
@@ -80,7 +84,7 @@ end
 
 --- Reload the metadata from the file
 M.reload_from_file = function()
-    local ok, json = pcall(vim.fn.json_decode, utils.read_file_contents(M.path))
+    local ok, json = pcall(vim.fn.json_decode, M.utils.read_file_contents(M.path))
     if ok and json ~= nil then
         M.json = json
     else
@@ -90,7 +94,7 @@ end
 
 --- Save the metadata to the file
 M.save_to_file = function()
-    if not utils.write_to_file(M.path, vim.fn.json_encode(M.json)) then
+    if not M.utils.write_to_file(M.path, vim.fn.json_encode(M.json)) then
         M.log.error('Failed to save metadata to file: ' .. M.path)
     end
 end

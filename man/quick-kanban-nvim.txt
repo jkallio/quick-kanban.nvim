@@ -1,0 +1,301 @@
+==============================================================================
+                                                           *quick-kanban-nvim*
+
+A plugin for quickly managing your project tasks in a kanban board.
+
+All the data is stored as files inside a project folder as text/markdown 
+files. Metadata is stored as JSON.
+
+Author: Jussi Kallio <jkallio+quick-kanban@gmail.com>
+
+==============================================================================
+CONTENTS                                                   *quick-kanban.nvim*
+
+    1. Introduction .................... |quick-kanban-introduction|
+    2. Setup ........................... |quick-kanban-setup|
+    3. Lazy Loading .................... |quick-kanban-lazy-loading|
+    4. Mappings ........................ |quick-kanban-mappings|
+    5. Usage ........................... |quick-kanban-usage|
+    5.1 Edit Mode ...................... |quick-kanban-edit-mode|
+    6. Folder Structure ................ |quick-kanban-folder-structure|
+    7. Contributing .................... |quick-kanban-contrib|
+    8. License ......................... |quick-kanban-license|
+
+==============================================================================
+1. Introduction                                    *quick-kanban-introduction*
+
+This plugin was built to help manage project tasks in a kanban board quickly
+without having to leave the editor. It is *not* meant to replace a full-
+featured project management tool, and is best suited for small projects for
+personal use or small teams.
+
+Main features:
+
+  - Simple and intuitive interface.
+  - File based task management.
+  - Customizable Kanban categories.
+  - Customizable keybindings.
+  - Quickly add, move, and delete tasks.
+  - Item archiving for completed tasks.
+  - Preview markdown files in a floating window.
+  - Edit markdown files directly in Kanban UI.
+
+This plugin requires neovim 0.6 or higher. Since this plugin is mainly written
+in lua, it will not work with Vim.
+
+==============================================================================
+2. Setup                                                  *quick-kanban-setup*
+
+The plugin does not require any special setup to work. However if you want to
+customize the default behavior or style, you can pass a table of options using
+the `setup` function.
+
+  Example: >
+    require'quick-kanban'.setup({
+      path = '~/Notes/Kanban',
+      log_level = "error",
+    })
+<
+
+The following options are available:
+
+- `path` (string): The path to the folder where the Kanban board files are
+  stored. Default is `~/Notes/Kanban`. On default this option is set as
+  `nil` which means that the plugin will use the current working directory
+  as the path.
+
+- `log_level` ("debug", "info", "warn", "error"): Set the log level for the
+  plugin. Default is "warn". You can also set this to `nil` to disable
+  logging.
+
+- `default_categories` (table): A table of default categories for the Kanban
+  board. Default is `{"Backlog", "In Progress", "Done"}`.
+
+  Exmaple: >
+    default_categories = {
+      "Backlog",
+      "In Progress",
+      "Done",
+    }
+<
+- `mappings` (table): A table of key mappings for the Kanban board. Default
+  mappings are defined in |quick-kanban-mappings|.
+
+- `disabled_keys` (table): A table of keys that are disabled in the Kanban UI
+  windows. For example, keys like `a`, `i`, `o`, `p` are disabled on default.
+
+- `subirectories` (table): A table of the names of the subdirectories that
+  are created for the Kanban project.
+
+  Example: >
+    subdirectories = {
+      items = '.items',
+      archive = '.archive',
+      attachments = '.attachments',
+    }
+<
+- `number` (boolean): If set to true, the preview window will show line
+  numbers. Default is `true`.
+
+- `wrap` (boolean): If set to true, the item tiles will wrap lines. Default
+  is `true`.
+
+- `show_preview` (boolean=: If set to false, the preview window will not be
+  shown. Default is `true`.
+
+- `show_archive` (boolean): If set to true, the archive widnow will always
+  be shown. Default is `false`.
+
+- `window` (table): A collection of window options for the Kanban UI.
+
+  Example: >
+    window = {
+      width = 40,
+      height = 30,
+      title_decoration = { "-=[", "]=-"},
+      blend = 5,
+      vertical_gap = 1,
+      horizontal_gap = 2,
+      hide_cursor = true,
+      accent_color = 
+      hilight_color = "#FFFF44",
+      active_text_bg = "#448844",
+      active_text_fg = "#000000",
+      selected_text_bg = "#888844",
+      selected_text_fg = "#000000",
+    }
+<
+==============================================================================
+3. Lazy Loading                                    *quick-kanban-lazy-loading*
+
+The plugin is lazy loaded by default. This means that the plugin will only be
+loaded when you open the Kanban board for the first time. This is done to
+reduce the startup time of Neovim.
+
+If you want to disable lazy loading, and load the plugin along with all the
+task items at startup, you can call the `init` function manually in your
+`init.vim` file.
+
+  Example: >
+    require'quick-kanban'.init()
+
+==============================================================================
+4. Mappings                                            *quick-kanban-mappings*
+
+The following mappings are defined by default:
+
+    ?           Show the help message.
+    h           Move to previous category
+    j           Move to next item in the cateogry
+    k           Move to previous item in the category
+    l           Move to next category
+    a           Add new task item
+    r           Rename an item
+    e           Edit an item under cursor
+    d           Archive an item
+    D           Delete an item permanently
+    u           Unarchive an item (only in archive view)
+    o           Open the markdown file in a new buffer
+    <return>    Select/activate an item
+    <esc><esc>  Leave edit mode (only in edit view)
+    <leader>a   Toggle archive view
+    <leader>p   Toggle preview window
+    q           Quit the Kanban UI
+
+Mappings can be changed by passing the `mappings` table in `setup` function.
+table, with commands as keys, and the desired mappings as values. Note that
+you can assign multiple keys to a command by passing a table of keys.
+
+  Example: >
+    mappings = {
+      show_help = '?',
+      next_category = 'l',
+      prev_category = 'h',
+      next_item = 'j',
+      prev_item = 'k',
+      add_item = 'a',
+      edit_item = 'e',
+      end_editing = '<esc><esc>',
+      archive_item = 'd',
+      unarchive_item = 'u',
+      delete = 'D',
+      open_item = '<leader>o',
+      rename = 'r',
+      select_item = '<cr>',
+      toggle_archive = '<leader>a',
+      toggle_preview = '<leader>p',
+      quit = { 'q', '<esc>' }, -- Pass multiple keys to a command
+    },
+<
+
+To ensure better user experience, the following keymaps have been disabled
+(or remapped) in the Kanban UI windows.
+    { a, c, d, i, o, p, r, x, g, G, <esc>, <tab>, <cr>, <bs> }
+
+The exception is the |quick-kanban-edit-mode| where the only remapped
+shortcut is by default <esc><esc> to exit the edit mode. This can be
+changed by passing the `edit_mode_keymaps` table in `setup` function.
+
+
+==============================================================================
+5. Usage
+
+To open the Kanban board, run the `:QuickKanban` command. This will open the
+Kanban UI in a floating window. The UI is divided into two windows: the Kanban
+board on the top, and the preview window on the bottom. If Archive view is on,
+the window will appear on the right side of the Kanban board.
+
+You can move an item from one category to another by selecting the item first
+and then pressing `l` to move it to the next category, or `h` to move it to
+the previous category. 
+
+To change the order of the items in a category, you can select an item and
+the use `j` and `k` to move the cursor up and down.
+
+To add a new item, press `a`. This will open a prompt to insert the title of
+the new item. Press <cr> to confirm the title, and the item will be added to
+the current category.
+
+To archive an item, select the item and press `d`. This will move the item to
+the archive category. To unarchive an item, press `u` in the archive view.
+
+To delete an item permanently, select the item and press `D`. This will delete
+the item from the project folder. Be careful, as this action cannot be undone.
+
+To rename an item, select the item and press `r`. This will open a prompt to
+insert the new title of the item. Press <cr> to confirm the new title.
+
+To open the markdown file of an item in a new buffer, select the item and
+press `o`.
+
+To toggle the archive view, press `<leader>a`. This will show or hide the
+archive window on the right side of the Kanban board.
+
+To toggle the preview window, press `<leader>p`. This will show or hide the
+preview window on the bottom of the Kanban board.
+
+To quit the Kanban UI, press `q`.
+
+To show the help message, press `?`.
+
+==============================================================================
+5.1 Edit Mode                                          *quick-kanban-edit-mode*
+
+Edit mode is a special mode that allows you to edit the markdown file of an
+item directly in the Kanban UI. To enter edit mode, press `e` while the cursor
+is on the item you want to edit. This will switch the window focus into the
+preview window, and allow you to edit the markdown file.
+
+To exit edit mode, press <esc><esc>. This will save the changes to the file
+and return the focus back to the Kanban UI.
+
+You can also edit the markdown file by pressing `o` in the Kanban UI. This
+will open the markdown file in a new buffer, and you can edit it there like
+any other file in Neovim.
+
+==============================================================================
+6. Folder Structure                            *quick-kanban-folder-structure*
+
+The Kanban board is stored as a collection of text files in a project folder.
+
+Each task is stored in the `.items` folder as a JSON metadata file. The meta
+file contains information like the title, category, order, and attachment.
+
+The markdown content of the item is stored in a separate file in the
+`.attachments` folder.
+
+Archived items are stored in the `.archive` folder. The archived items are
+stored as JSON metadata files, similar to the active items. The markdown
+content of the archived items is still stored in the `.attachments` folder.
+
+The folder structure is as follows:
+>
+    project_folder/
+    ├── .items/
+    │   ├── item1
+    │   ├── item2
+    │   └── ...
+    ├── .archive/
+    │   ├── item3
+    │   ├── item4
+    │   └── ...
+    ├── .attachments/
+    │   ├── item1.md
+    │   ├── item2.md
+    │   └── ...
+    └── metadata.json
+<
+
+==============================================================================
+7. Contributing                                         *quick-kanban-contrib*
+
+If you would like to contribute to the project, please open an issue or a PR:
+
+https://github.com/jkallio/quick-kanban.nvim
+
+==============================================================================
+8. License                                              *quick-kanban-license*
+
+MIT License
+
+vim:tw=78:ts=2:et:sts=2:sw=2:ft=help

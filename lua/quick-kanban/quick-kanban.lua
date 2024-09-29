@@ -1,33 +1,29 @@
-local utils = require('quick-kanban.utils')
-local WIN_HILIGHT_INACTIVE = 100
-local WIN_HILIGHT_ACTIVE = 101
-local WIN_HILIGHT_ITEM_SELECTED = 102
+local WIN_HILIGHT_INACTIVE = 10100
+local WIN_HILIGHT_ACTIVE = 10101
+local WIN_HILIGHT_ITEM_SELECTED = 10102
 local PREVIEW_KEY = "preview"
 local ARCHIVE_KEY = "archive"
-local KANBAN_KEY = "kanban"
 
---- Public interface
---- @type table
+--- @class quick-kanban.quick-kanban
 local M = {
-    ---  Options for the plugin
-    ---  @type table
+    ---  @type quick-kanban.config.options
     opts = {},
 
-    --- State of the plugin
-    --- @type table
+    --- @type quick-kanban.state
     state = {},
 
-    --- The items data module for the plugin
-    --- @type table
-    data = {},
+    --- @type quick-kanban.database
+    database = {},
 
-    --- The metadata module for the plugin
-    --- @type table
+    --- @type quick-kanban.metadata
     metadata = {},
 
-    --- Logger instance
     --- @type table
     log = {},
+
+    --- Utility functions
+    --- @type quick-kanban.utils
+    utils = {}
 }
 
 -------------------------------------------------------------------------------
@@ -62,19 +58,21 @@ vim.api.nvim_create_autocmd('WinLeave', {
     end
 })
 
--- Create an autocommand for the WinClosed event
-vim.api.nvim_create_autocmd("WinClosed", {
-    group = vim.api.nvim_create_augroup("MonitorWinClosed", { clear = true }),
+-- Set up an autocommand to trigger on buffer enter
+vim.api.nvim_create_autocmd("BufEnter", {
+    group = vim.api.nvim_create_augroup("MonitorBufferChange", { clear = true }),
     callback = function()
         if M == nil or M.state == nil or M.state.check_windows_validity == nil then
             return
         end
 
         if not M.state.check_windows_validity() then
+            M.log.warn("Invalid window(s) detected; Closing UI")
             M.close_ui()
         end
     end
 })
+
 
 -------------------------------------------------------------------------------
 --- Local Helper functions
@@ -84,17 +82,17 @@ vim.api.nvim_create_autocmd("WinClosed", {
 --- @param path string path to the directory
 --- @return boolean `false` if the user rejects the prompt
 local create_kanban_directories = function(path)
-    if not utils.directory_exists(path) then
+    if not M.utils.directory_exists(path) then
         if vim.fn.confirm(
                 'Kanban directory does not exist for this project.\r\nCreate Kanban directory?\r\n' .. path .. '?',
                 '&Yes\n&No', 2) ~= 1 then
             return false
         end
 
-        utils.touch_directory(path)
-        utils.touch_directory(utils.concat_paths(path, M.opts.subdirectories.items))
-        utils.touch_directory(utils.concat_paths(path, M.opts.subdirectories.archive))
-        utils.touch_directory(utils.concat_paths(path, M.opts.subdirectories.attachments))
+        M.utils.touch_directory(path)
+        M.utils.touch_directory(M.utils.concat_paths(path, M.opts.subdirectories.items))
+        M.utils.touch_directory(M.utils.concat_paths(path, M.opts.subdirectories.archive))
+        M.utils.touch_directory(M.utils.concat_paths(path, M.opts.subdirectories.attachments))
         M.metadata.save_to_file()
     end
     return true
@@ -123,8 +121,8 @@ local reload_buffer_for_category = function(category)
         return
     end
 
-    local items = category == ARCHIVE_KEY and M.data.get_archived_items() or
-        M.data.get_items_for_category_sorted(category)
+    local items = category == ARCHIVE_KEY and M.database.get_archived_items() or
+        M.database.get_items_for_category_sorted(category)
     local lines = {}
     for _, item in ipairs(items) do
         table.insert(lines, " [" .. item.id .. "] " .. item.title)
@@ -195,7 +193,7 @@ local set_category_focus = function(index)
     -- Move selected item to the new category (or restore the previously selected item)
     if M.state.selected_item_id ~= nil
         and cur_category ~= new_category
-        and M.data.move_item_to_category(M.state.selected_item_id, M.state.selected_category)
+        and M.database.move_item_to_category(M.state.selected_item_id, M.state.selected_category)
     then
         reload_buffer_for_category(cur_category)
         reload_buffer_for_category(new_category)
@@ -226,7 +224,7 @@ M.set_current_buffer_line_focus = function(line_num)
 
     -- If an item is currently selected, move it to new index
     if M.state.is_item_selected() then
-        if M.data.move_item_within_category(M.state.selected_item_id, line_num - cur_idx) then
+        if M.database.move_item_within_category(M.state.selected_item_id, line_num - cur_idx) then
             reload_buffer_for_category(M.state.selected_category)
         else
             M.log.error("Failed to move item; ID=" .. M.state.selected_item_id .. "; Index=" .. line_num)
@@ -241,25 +239,26 @@ M.set_current_buffer_line_focus = function(line_num)
 end
 
 --- Returns
-local get_help_text_lines = function(keymaps)
+local get_help_text_lines = function(mappings)
     local lines = {}
     local center = (M.opts.window.width * #M.metadata.json.categories) / 2
 
     -- Collect all the keymaps from the table and format them
     local items = {}
     local rows = vim.fn.floor(M.opts.window.height / 2) - 7
-    for _, keymap in pairs(keymaps) do
-        if keymap.keys == nil or keymap.desc == nil then
-            M.log.warn("Invalid keymap: " .. vim.inspect(keymap))
+    for key, mapping in pairs(mappings) do
+        if key == nil or mapping == nil then
+            M.log.warn("Invalid keymap: " .. vim.inspect(mapping))
             return lines
         end
 
-        local key = keymap.keys
-        if type(key) == "table" then
-            key = key[1]
+        local keymap = mapping
+        if type(keymap) == "table" then
+            keymap = keymap[1]
         end
 
-        local help = utils.right_pad(keymap.desc, 20, '.') .. key
+        --local help = M.utils.right_pad(keymap.desc, 20, '.') .. key
+        local help = M.utils.right_pad((key .. ' '), 20, '.') .. ' ' .. keymap
         table.insert(items, help)
     end
 
@@ -267,27 +266,27 @@ local get_help_text_lines = function(keymaps)
     for i, item in ipairs(items) do
         local row = ((i - 1) % rows) + 1
         local line = lines[row] or ""
-        line = utils.trim_left(line)
-        line = line .. utils.right_pad(item, 35)
+        line = M.utils.trim_left(line)
+        line = line .. M.utils.right_pad(item, 35)
         lines[row] = line
         min_width = vim.fn.max({ min_width, #line })
     end
 
     for row, line in pairs(lines) do
-        local new_line = utils.right_pad(line, min_width)
-        new_line = utils.left_pad(new_line, center + #new_line / 2)
+        local new_line = M.utils.right_pad(line, min_width)
+        new_line = M.utils.left_pad(new_line, center + #new_line / 2)
         lines[row] = new_line
     end
 
     local title = "Quick Kanban Help"
-    title = utils.left_pad(title, center + #title / 2)
+    title = M.utils.left_pad(title, center + #title / 2)
 
     table.insert(lines, 1, title)
     table.insert(lines, 2, "")
     table.insert(lines, "")
 
     local copyright = "(c) 2024 Jussi Kallio"
-    copyright = utils.left_pad(copyright, center + #copyright / 2)
+    copyright = M.utils.left_pad(copyright, center + #copyright / 2)
     table.insert(lines, copyright)
     return lines
 end
@@ -296,22 +295,23 @@ end
 --- Public Module functions
 -------------------------------------------------------------------------------
 
---- Setup the plugin with the given options
+--- Initialize the plugin with the given options
 --- @param options table The config table to configure the plugin
-M.setup = function(options, log)
+M.init = function(options, log)
     M.opts = options
     M.log = log
 
     M.state = require('quick-kanban.state')
-    M.state.setup(M.opts, M.log)
+    M.state.init(M.opts, M.log)
 
     M.metadata = require('quick-kanban.metadata')
-    M.metadata.setup(M.opts, M.log)
+    M.metadata.init(M.opts, M.log)
 
-    M.data = require('quick-kanban.data')
-    M.data.setup(M.opts, M.metadata, M.log)
+    M.database = require('quick-kanban.database')
+    M.database.init(M.opts, M.metadata, M.log)
 
-    M.state.selected_view = KANBAN_KEY
+    M.utils = require('quick-kanban.utils')
+
     M.state.selected_category = M.metadata.json.default_category
     for i, category in ipairs(M.metadata.json.categories) do
         M.state.windows[category] = {
@@ -405,7 +405,7 @@ end
 
 --- Open the kanban board UI
 M.open_ui = function()
-    if not utils.directory_exists(M.opts.path) then
+    if not M.utils.directory_exists(M.opts.path) then
         if not create_kanban_directories(M.opts.path) then
             return
         end
@@ -434,36 +434,34 @@ M.open_ui = function()
     end
 
     --- Local helper function to disable default vim keys
-    local function disable_default_keys(bufnr)
-        local disabled_keys = { 'a', 'c', 'd', 'i', 'o', 'p', 'r', 'x', 'gg', 'G', '<esc>', '<tab>', '<cr>', '<bs>',
-            '<del>' }
-        for _, key in ipairs(disabled_keys) do
-            utils.set_keymap(bufnr, string.lower(key), '<nop>')
-            utils.set_keymap(bufnr, string.upper(key), '<nop>')
+    local function disable_keys(bufnr, keys)
+        for _, key in ipairs(keys) do
+            M.utils.set_keymap(bufnr, string.lower(key), '<nop>')
+            M.utils.set_keymap(bufnr, string.upper(key), '<nop>')
         end
     end
 
     --- Local helper function for setting keymaps for a buffer
-    local function set_keymaps(bufnr, keymaps)
-        utils.set_keymap(bufnr, keymaps.show_help, ':lua require("quick-kanban").show_help_text()<cr>')
-        utils.set_keymap(bufnr, keymaps.archive_item, ':lua require("quick-kanban").archive_item()<cr>')
-        utils.set_keymap(bufnr, keymaps.toggle_archive, ':lua require("quick-kanban").toggle_archive_window()<cr>')
-        utils.set_keymap(bufnr, keymaps.toggle_preview, ':lua require("quick-kanban").toggle_preview_window()<cr>')
-        utils.set_keymap(bufnr, keymaps.add_item, ':lua require("quick-kanban").add_item()<cr>')
-        utils.set_keymap(bufnr, keymaps.edit_item, ':lua require("quick-kanban").edit_item()<cr>')
-        utils.set_keymap(bufnr, keymaps.delete, ':lua require("quick-kanban").delete_item()<cr>')
-        utils.set_keymap(bufnr, keymaps.quit, ':lua require("quick-kanban").close_ui()<cr>')
-        utils.set_keymap(bufnr, keymaps.next_category, ':lua require("quick-kanban").next_category()<cr>')
-        utils.set_keymap(bufnr, keymaps.prev_category, ':lua require("quick-kanban").prev_category()<cr>')
-        utils.set_keymap(bufnr, keymaps.next_item, ':lua require("quick-kanban").next_item()<cr>')
-        utils.set_keymap(bufnr, keymaps.prev_item, ':lua require("quick-kanban").prev_item()<cr>')
-        utils.set_keymap(bufnr, keymaps.open_item, ':lua require("quick-kanban").open_item()<cr>')
-        utils.set_keymap(bufnr, keymaps.select_item, ':lua require("quick-kanban").select_item()<cr>')
-        utils.set_keymap(bufnr, keymaps.rename, ':lua require("quick-kanban").rename_item()<cr>')
+    local function set_mappings(bufnr, mappings)
+        M.utils.set_keymap(bufnr, mappings.show_help, ':lua require("quick-kanban").show_help_text()<cr>')
+        M.utils.set_keymap(bufnr, mappings.archive_item, ':lua require("quick-kanban").archive_item()<cr>')
+        M.utils.set_keymap(bufnr, mappings.toggle_archive, ':lua require("quick-kanban").toggle_archive_window()<cr>')
+        M.utils.set_keymap(bufnr, mappings.toggle_preview, ':lua require("quick-kanban").toggle_preview_window()<cr>')
+        M.utils.set_keymap(bufnr, mappings.add_item, ':lua require("quick-kanban").add_item()<cr>')
+        M.utils.set_keymap(bufnr, mappings.edit_item, ':lua require("quick-kanban").edit_item()<cr>')
+        M.utils.set_keymap(bufnr, mappings.delete, ':lua require("quick-kanban").delete_item()<cr>')
+        M.utils.set_keymap(bufnr, mappings.quit, ':lua require("quick-kanban").close_ui()<cr>')
+        M.utils.set_keymap(bufnr, mappings.next_category, ':lua require("quick-kanban").next_category()<cr>')
+        M.utils.set_keymap(bufnr, mappings.prev_category, ':lua require("quick-kanban").prev_category()<cr>')
+        M.utils.set_keymap(bufnr, mappings.next_item, ':lua require("quick-kanban").next_item()<cr>')
+        M.utils.set_keymap(bufnr, mappings.prev_item, ':lua require("quick-kanban").prev_item()<cr>')
+        M.utils.set_keymap(bufnr, mappings.open_item, ':lua require("quick-kanban").open_item()<cr>')
+        M.utils.set_keymap(bufnr, mappings.select_item, ':lua require("quick-kanban").select_item()<cr>')
+        M.utils.set_keymap(bufnr, mappings.rename, ':lua require("quick-kanban").rename_item()<cr>')
     end
 
     if M.opts.window.hide_cursor then
-        utils.hide_cursor()
+        M.utils.hide_cursor()
     end
 
     -- Get the main UI (1st element in the ui list)
@@ -487,7 +485,7 @@ M.open_ui = function()
             col = win_pos_left + (i - 1) * (win_width + M.opts.window.horizontal_gap),
             row = M.opts.window.vertical_gap
         }
-        local wid, bufnr = utils.open_popup_window(
+        local wid, bufnr = M.utils.open_popup_window(
             (M.opts.window.title_decoration[1] .. category .. M.opts.window.title_decoration[2]),
             win_size, win_pos)
 
@@ -496,8 +494,8 @@ M.open_ui = function()
 
         set_window_options(wid, M.opts)
         set_buffer_options(bufnr)
-        disable_default_keys(bufnr)
-        set_keymaps(bufnr, M.opts.keymaps)
+        disable_keys(bufnr, M.opts.disabled_keys)
+        set_mappings(bufnr, M.opts.mappings)
 
         --M.state.windows[category].selected_line = M.state.windows[category].selected_line or 1
         reload_buffer_for_category(category)
@@ -505,7 +503,7 @@ M.open_ui = function()
 
     --- Create preview window
     if M.opts.show_preview then
-        local wid, bufnr = utils.open_popup_window("",
+        local wid, bufnr = M.utils.open_popup_window("",
             {
                 width = vim.fn.round(#M.metadata.json.categories * win_width) +
                     (#M.metadata.json.categories - 1) * M.opts.window.horizontal_gap,
@@ -521,7 +519,7 @@ M.open_ui = function()
         M.state.windows[PREVIEW_KEY].bufnr = bufnr
 
         -- Create a help text buffer for the default preview window
-        local help_text = get_help_text_lines(M.opts.keymaps)
+        local help_text = get_help_text_lines(M.opts.mappings)
         vim.api.nvim_buf_set_lines(bufnr, 1, -1, false, help_text)
 
         -- Set the buffer options
@@ -538,12 +536,12 @@ M.open_ui = function()
         vim.api.nvim_win_set_hl_ns(wid, WIN_HILIGHT_ACTIVE)
 
         --- Disable default keys for the preview window
-        disable_default_keys(bufnr)
+        disable_keys(bufnr, M.opts.disabled_keys)
     end
 
     --- Create the archive window
     if M.opts.show_archive then
-        local wid, bufnr = utils.open_popup_window(
+        local wid, bufnr = M.utils.open_popup_window(
             (M.opts.window.title_decoration[1] .. "Archive" .. M.opts.window.title_decoration[2]),
             {
                 width = win_width,
@@ -562,11 +560,11 @@ M.open_ui = function()
 
         set_window_options(wid, M.opts)
         set_buffer_options(bufnr)
-        disable_default_keys(bufnr)
-        set_keymaps(bufnr, M.opts.keymaps)
-        utils.set_keymap(bufnr, M.opts.keymaps.archive_item,
+        disable_keys(bufnr, M.opts.disabled_keys)
+        set_mappings(bufnr, M.opts.mappings)
+        M.utils.set_keymap(bufnr, M.opts.mappings.archive_item,
             ':lua require("quick-kanban").unarchive_item()<cr>')
-        utils.set_keymap(bufnr, M.opts.keymaps.unarchive_item,
+        M.utils.set_keymap(bufnr, M.opts.mappings.unarchive_item,
             ':lua require("quick-kanban").unarchive_item()<cr>')
 
         --M.state.windows[ARCHIVE_KEY].selected_line = M.state.windows[ARCHIVE_KEY].selected_line or 1
@@ -583,7 +581,7 @@ end
 M.close_ui = function()
     M.state.is_open = false
     M.state.selected_item_id = nil
-    utils.show_cursor()
+    M.utils.show_cursor()
 
     for key, win in pairs(M.state.windows) do
         if vim.api.nvim_win_is_valid(win.id or -1) then
@@ -618,7 +616,7 @@ end
 
 --- Open the item under cursor
 M.open_selected_item = function()
-    local item = M.data.items[M.state.get_current_item_id() or -1]
+    local item = M.database.items[M.state.get_current_item_id() or -1]
     if item == nil then
         M.log.error("Failed to open item: item=nil")
         M.close_ui()
@@ -626,7 +624,7 @@ M.open_selected_item = function()
     end
 
     if item.attachment_path == nil then
-        M.data.create_attachment(item)
+        M.database.create_attachment(item)
     end
 
     vim.cmd('new ' .. item.attachment_path)
@@ -639,7 +637,7 @@ M.add_item = function()
         return
     end
 
-    M.data.add_item(M.metadata.json.default_category, input)
+    M.database.add_item(M.metadata.json.default_category, input)
     reload_buffer_for_category(M.metadata.json.default_category)
 
     set_category_focus(M.metadata.get_category_index(M.metadata.json.default_category) or 1)
@@ -648,7 +646,7 @@ end
 
 --- Rename the current item
 M.rename_item = function()
-    local item = M.data.items[M.state.get_current_item_id() or -1]
+    local item = M.database.items[M.state.get_current_item_id() or -1]
     if item == nil then
         M.log.error("Failed to rename item: item=nil")
         return
@@ -657,7 +655,7 @@ M.rename_item = function()
     local input = vim.fn.input({ prompt = 'New name for item [' .. item.id .. ']', default = item.title })
     if input ~= nil and #input > 0 then
         item.title = input
-        M.data.save_item(item)
+        M.database.save_item(item)
         reload_buffer_for_category(item.category)
     end
 end
@@ -665,7 +663,7 @@ end
 --- Archive the selected item
 --- @return boolean `true` if the item was archived
 M.archive_selected_item = function()
-    local item = M.data.items[M.state.get_current_item_id() or -1]
+    local item = M.database.items[M.state.get_current_item_id() or -1]
     if item == nil then
         M.log.error("Failed to archive item: item=nil")
         return false
@@ -673,7 +671,7 @@ M.archive_selected_item = function()
 
     local confirm = vim.fn.confirm('Archive item "[' .. item.id .. '] ' .. item.title .. '"?', '&Yes\n&No', 2) == 1
     if confirm then
-        M.data.archive_item(item.id)
+        M.database.archive_item(item.id)
         reload_buffer_for_category(item.category)
         reload_buffer_for_category(ARCHIVE_KEY)
         return true
@@ -690,7 +688,7 @@ M.unarchive_selected_item = function()
         return false
     end
 
-    local item = M.data.unarchive_item(M.state.get_current_item_id() or -1)
+    local item = M.database.unarchive_item(M.state.get_current_item_id() or -1)
     if item == nil then
         M.log.error("Failed to unarchive item: item=nil")
         return false
@@ -704,7 +702,7 @@ end
 --- Delete selected item
 --- @return boolean `true` if the item was deleted
 M.delete_selected_item = function()
-    local item = M.data.get_item(M.state.get_current_item_id() or -1)
+    local item = M.database.get_item(M.state.get_current_item_id() or -1)
     if item == nil then
         M.log.error("Failed to delete item: item=nil")
         return false
@@ -714,7 +712,7 @@ M.delete_selected_item = function()
         'Permanently DELETE item "[' .. item.id .. '] ' .. item.title .. '"? (This cannot be undone)',
         '&Yes\n&No', 2) == 1
     if confirm then
-        M.data.delete_item(item.id)
+        M.database.delete_item(item.id)
         reload_buffer_for_category(M.state.selected_category)
         return true
     end
@@ -732,7 +730,7 @@ M.update_preview = function(item, edit_mode)
     -- If no item is provided, get the current item
     if item == nil then
         local item_id = M.state.get_current_item_id()
-        item = M.data.get_item(item_id or -1)
+        item = M.database.get_item(item_id or -1)
         if item == nil then
             M.state.preview_item_id = nil
             M.show_help_text()
@@ -749,7 +747,7 @@ M.update_preview = function(item, edit_mode)
     end
 
     -- If item has no attachment, create and set a new empty buffer in Preview window
-    if item.attachment_path == nil or not utils.file_exists(item.attachment_path) then
+    if item.attachment_path == nil or not M.utils.file_exists(item.attachment_path) then
         M.state.preview_item_id = nil
         vim.api.nvim_win_set_buf(wid, vim.api.nvim_create_buf(false, true))
         return
@@ -768,12 +766,12 @@ M.update_preview = function(item, edit_mode)
     vim.api.nvim_set_option_value('buflisted', false, { buf = bufnr })
     vim.api.nvim_set_option_value('winblend', M.opts.window.blend, { win = wid })
     vim.api.nvim_set_option_value('number', M.opts.number, { win = wid })
-    utils.set_keymap(bufnr, M.opts.keymaps.end_editing, ':lua require("quick-kanban").end_editing()<cr>')
+    M.utils.set_keymap(bufnr, M.opts.mappings.end_editing, ':lua require("quick-kanban").end_editing()<cr>')
 
     if edit_mode then
         vim.api.nvim_win_set_hl_ns(wid, WIN_HILIGHT_ACTIVE)
         vim.api.nvim_win_set_hl_ns(cur_wid, WIN_HILIGHT_INACTIVE)
-        utils.show_cursor()
+        M.utils.show_cursor()
     elseif cur_wid ~= nil then
         vim.api.nvim_set_current_win(cur_wid)
     else
@@ -820,7 +818,7 @@ M.edit_item = function()
         return
     end
 
-    local item = M.data.get_item(M.state.get_current_item_id() or -1)
+    local item = M.database.get_item(M.state.get_current_item_id() or -1)
     if item == nil then
         return
     end
@@ -832,7 +830,7 @@ M.edit_item = function()
     end
 
     if item.attachment_path == nil then
-        M.data.create_attachment(item)
+        M.database.create_attachment(item)
     end
 
     M.update_preview(item, true)
@@ -863,7 +861,7 @@ M.end_editing = function()
     M.set_current_buffer_line_focus(window.selected_line)
 
     if M.opts.window.hide_cursor then
-        utils.hide_cursor()
+        M.utils.hide_cursor()
     end
 end
 

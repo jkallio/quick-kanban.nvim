@@ -1,16 +1,16 @@
-local utils = require('quick-kanban.utils')
-
+--- @class quick-kanban.config
 local M = {
-    --- @class options Configuration options for the quick-kanban plugin. These can be overriden by calling the `setup` function.
+    --- Configuration options for the quick-kanban plugin.
+    --- @class quick-kanban.config.options Configuration options for the quick-kanban plugin. These can be overriden by calling the `setup` function.
     options = {
         --- Full path to directory where the kanban board data will be stored.
         --- On default the '/quick-kanban' directory will be created in the current working directory.
-        --- @type string
-        path = utils.concat_paths(utils.get_working_directory_path(), ".quick-kanban"),
+        --- @type string?
+        path = nil,
 
-        --- Log level for the plugin (debug, info, warn, error, nil)
-        --- @type string
-        log_level = "info",
+        --- Log level for the plugin
+        --- @type "debug" | "info" | "warn" | "error" | nil
+        log_level = "warn",
 
         --- Subdirectories for different files in the kanban board.
         --- @type table
@@ -21,7 +21,7 @@ local M = {
         },
 
         --- A list of categories for the default kanban board.
-        --- @type table
+        --- @type string[]
         default_categories = {
             'Backlog',
             'In Progress',
@@ -29,26 +29,31 @@ local M = {
         },
 
         --- The key mappings for interacting with the windows in the kanban board.
+        --- Each command can be assigned with multiple keys
         --- @type table
-        keymaps = {
-            show_help = { keys = '?', desc = "Show help" },
-            next_category = { keys = 'l', desc = "Next category" },
-            prev_category = { keys = 'h', desc = "Prev category" },
-            next_item = { keys = 'j', desc = "Next item" },
-            prev_item = { keys = 'k', desc = "Prev item" },
-            add_item = { keys = 'a', desc = "Add new item" },
-            edit_item = { keys = 'e', desc = "Edit attachment" },
-            end_editing = { keys = '<esc><esc>', desc = "End editing" },
-            archive_item = { keys = 'd', desc = "Archvie item" },
-            unarchive_item = { keys = 'u', desc = "Unarchive item" },
-            delete = { keys = 'D', desc = "Delete item" },
-            open_item = { keys = '<leader>o', desc = "Open item" },
-            rename = { keys = { 'r', 'c' }, desc = "Rename item title" },
-            select_item = { keys = '<cr>', desc = "Select item" },
-            toggle_archive = { keys = '<leader>a', desc = "Toggle Archive" },
-            toggle_preview = { keys = '<leader>p', desc = "Toggle Preview" },
-            quit = { keys = { 'q', '<esc>' }, desc = "Quit" },
+        mappings = {
+            show_help = '?',
+            next_category = 'l',
+            prev_category = 'h',
+            next_item = 'j',
+            prev_item = 'k',
+            add_item = 'a',
+            edit_item = 'e',
+            end_editing = '<esc><esc>',
+            archive_item = 'd',
+            unarchive_item = 'u',
+            delete = 'D',
+            open_item = '<leader>o',
+            rename = 'r',
+            select_item = '<cr>',
+            toggle_archive = '<leader>a',
+            toggle_preview = '<leader>p',
+            quit = { 'q', '<esc>' }, -- You can assign multiple keys to a command
         },
+
+        --- List of disabled key mappings (to improve the usability of the kanban board)
+        --- @type string[]
+        disabled_keys = { 'a', 'c', 'd', 'i', 'm', 'o', 'p', 'r', 'x', 'gg', 'G', '<esc>', '<tab>', '<cr>', '<bs>', '<del>' },
 
         --- The window configuration for the kanban board
         --- @type table
@@ -62,7 +67,7 @@ local M = {
             height = 30,
 
             --- Window title decoration (prefix and suffix)
-            --- @type table
+            --- @type string[]
             title_decoration = { "-=[ ", " ]=-" },
 
             --- The transparency of the kanban board window.
@@ -124,11 +129,17 @@ local M = {
     }
 }
 
---- Setup the configuration options for the quick-kanban plugin.
---- @param options table? Configuration options for the quick-kanban plugin.
-function M.setup(options)
-    if options ~= nil then
-        M.options = vim.tbl_deep_extend("force", {}, M.options, options)
+--- Initialize the configuration options for the quick-kanban plugin.
+--- @param opts table? User defined configuration options
+function M.init(opts)
+    if opts then
+        M.options = vim.tbl_deep_extend("force", M.options, opts)
+    end
+
+    -- Set default path if no path was given
+    if not M.options.path then
+        local utils = require('quick-kanban.utils')
+        M.options.path = utils.concat_paths(utils.get_working_directory_path(), ".quick-kanban")
     end
 end
 

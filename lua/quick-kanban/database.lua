@@ -1,10 +1,8 @@
-local utils = require('quick-kanban.utils')
-
 --- This module handles loading and saving all the data from and into disk.
---- @type table
+--- @class quick-kanban.database
 local M = {
     --- Configuration options
-    --- @type table
+    --- @type quick-kanban.config.options
     opts = {},
 
     --- Dictionary of items where the key is the item.id
@@ -12,21 +10,27 @@ local M = {
     items = {},
 
     --- The metadata for the kanban board
-    --- @type table
+    --- @type quick-kanban.metadata
     metadata = {},
 
     --- Logger instance
     --- @type table
-    log = {}
+    log = {},
+
+    --- @type quick-kanban.utils
+    utils = {}
 }
 
---- Setup the data module with the specified options.
---- @param opts table The configuration options
-M.setup = function(opts, metadata, log)
+--- Initialize the data module with the specified options.
+--- @param opts quick-kanban.config.options The configuration options
+--- @param metadata quick-kanban.metadata The metadata for the kanban board
+--- @param log table The logger object
+M.init = function(opts, metadata, log)
     M.opts = opts
     M.log = log
     M.metadata = metadata
-    if utils.directory_exists(M.opts.path) then
+    M.utils = require('quick-kanban.utils')
+    if M.utils.directory_exists(M.opts.path) then
         M.reload_item_files()
     end
 end
@@ -57,13 +61,13 @@ end
 --- @return table items The archived items
 M.get_archived_items = function()
     local items = {}
-    local archive_path = utils.concat_paths(M.opts.path, M.opts.subdirectories.archive)
-    if utils.directory_exists(archive_path) then
+    local archive_path = M.utils.concat_paths(M.opts.path, M.opts.subdirectories.archive)
+    if M.utils.directory_exists(archive_path) then
         local file_list = vim.fn.readdir(archive_path)
         for _, file_name in ipairs(file_list) do
-            local file_path = utils.concat_paths(archive_path, file_name)
-            if utils.file_exists(file_path) then
-                local item = vim.fn.json_decode(utils.read_file_contents(file_path))
+            local file_path = M.utils.concat_paths(archive_path, file_name)
+            if M.utils.file_exists(file_path) then
+                local item = vim.fn.json_decode(M.utils.read_file_contents(file_path))
                 table.insert(items, item)
             else
                 M.log.error("File not found: " .. file_path)
@@ -146,8 +150,8 @@ end
 --- Reload the data items from the files in the configured path.
 --- @return boolean true if the items were reloaded successfully, false otherwise
 M.reload_item_files = function()
-    local items_path = utils.concat_paths(M.opts.path, M.opts.subdirectories.items)
-    if not utils.directory_exists(items_path) then
+    local items_path = M.utils.concat_paths(M.opts.path, M.opts.subdirectories.items)
+    if not M.utils.directory_exists(items_path) then
         M.log.error("Invalid configuration: Items subdirectory not found")
         return false
     end
@@ -155,9 +159,9 @@ M.reload_item_files = function()
     M.items = {}
     local file_list = vim.fn.readdir(items_path)
     for _, file_name in ipairs(file_list) do
-        local file_path = utils.concat_paths(items_path, file_name)
-        if utils.file_exists(file_path) then
-            local item = vim.fn.json_decode(utils.read_file_contents(file_path))
+        local file_path = M.utils.concat_paths(items_path, file_name)
+        if M.utils.file_exists(file_path) then
+            local item = vim.fn.json_decode(M.utils.read_file_contents(file_path))
             M.items[item.id] = item
         else
             M.log.error("File not found: " .. file_path)
@@ -170,8 +174,8 @@ end
 --- @param item table
 M.save_item = function(item)
     local subdir = item.is_archived and M.opts.subdirectories.archive or M.opts.subdirectories.items
-    local file_path = utils.concat_paths(M.opts.path, subdir, item.id)
-    utils.write_to_file(file_path, vim.fn.json_encode(item))
+    local file_path = M.utils.concat_paths(M.opts.path, subdir, item.id)
+    M.utils.write_to_file(file_path, vim.fn.json_encode(item))
 end
 
 --- Create a markdown attachment file for the specified item.
@@ -187,10 +191,10 @@ M.create_attachment = function(item)
         M.log.error("Item already has an attachment: " .. item.attachment_path)
         return false;
     end
-    item.attachment_path = utils.concat_paths(M.opts.path, M.opts.subdirectories.attachments, item.id .. '.md')
+    item.attachment_path = M.utils.concat_paths(M.opts.path, M.opts.subdirectories.attachments, item.id .. '.md')
     M.save_item(item)
-    if not utils.file_exists(item.attachment_path) then
-        utils.write_to_file(item.attachment_path, "# " .. item.id .. ": " .. item.title)
+    if not M.utils.file_exists(item.attachment_path) then
+        M.utils.write_to_file(item.attachment_path, "# " .. item.id .. ": " .. item.title)
     end
     return true
 end
@@ -229,9 +233,9 @@ M.archive_item = function(item_id)
 
     item.is_archived = true
     M.items[item_id] = nil
-    utils.move_file(
-        utils.concat_paths(M.opts.path, M.opts.subdirectories.items, item.id),
-        utils.concat_paths(M.opts.path, M.opts.subdirectories.archive, item.id)
+    M.utils.move_file(
+        M.utils.concat_paths(M.opts.path, M.opts.subdirectories.items, item.id),
+        M.utils.concat_paths(M.opts.path, M.opts.subdirectories.archive, item.id)
     )
     return item
 end
@@ -245,9 +249,9 @@ M.unarchive_item = function(item_id)
         if item.id == item_id then
             item.is_archived = false
             M.items[item_id] = item
-            utils.move_file(
-                utils.concat_paths(M.opts.path, M.opts.subdirectories.archive, item.id),
-                utils.concat_paths(M.opts.path, M.opts.subdirectories.items, item.id)
+            M.utils.move_file(
+                M.utils.concat_paths(M.opts.path, M.opts.subdirectories.archive, item.id),
+                M.utils.concat_paths(M.opts.path, M.opts.subdirectories.items, item.id)
             )
             return item
         end
@@ -258,19 +262,19 @@ end
 --- Delete given item
 --- @param item_id number The id of the item to delete
 M.delete_item = function(item_id)
-    local item_path = utils.concat_paths(M.opts.path, M.opts.subdirectories.items, item_id)
-    if utils.file_exists(item_path) then
-        utils.delete_file(item_path)
+    local item_path = M.utils.concat_paths(M.opts.path, M.opts.subdirectories.items, item_id)
+    if M.utils.file_exists(item_path) then
+        M.utils.delete_file(item_path)
     end
 
-    local archive_path = utils.concat_paths(M.opts.path, M.opts.subdirectories.archive, item_id)
-    if utils.file_exists(archive_path) then
-        utils.delete_file(archive_path)
+    local archive_path = M.utils.concat_paths(M.opts.path, M.opts.subdirectories.archive, item_id)
+    if M.utils.file_exists(archive_path) then
+        M.utils.delete_file(archive_path)
     end
 
-    local attachment_path = utils.concat_paths(M.opts.path, M.opts.subdirectories.attachments, item_id .. '.md')
-    if utils.file_exists(attachment_path) then
-        utils.delete_file(attachment_path)
+    local attachment_path = M.utils.concat_paths(M.opts.path, M.opts.subdirectories.attachments, item_id .. '.md')
+    if M.utils.file_exists(attachment_path) then
+        M.utils.delete_file(attachment_path)
     end
 
     M.items[item_id] = nil

@@ -1,3 +1,4 @@
+--- @class quick-kanban.utils
 local M = {}
 
 --- Returns the path for the current working directory
@@ -223,22 +224,25 @@ end
 --- @param bufnr number The buffer number
 --- @param keymap string|table The keymaps to configure
 --- @param cmd string The command to execute
+--- @return boolean success `true` if successfully mapped the key
 M.set_keymap = function(bufnr, keymap, cmd)
     if bufnr == nil or cmd == nil or keymap == nil then
-        return
+        return false
     end
 
     if type(keymap) == "string" then
         vim.api.nvim_buf_set_keymap(bufnr, 'n', keymap, cmd, { noremap = true, silent = true })
     elseif type(keymap) == "table" then
-        if type(keymap.keys) == "string" then
-            M.set_keymap(bufnr, keymap.keys, cmd)
-        else
-            for _, k in ipairs(keymap.keys) do
-                vim.api.nvim_buf_set_keymap(bufnr, 'n', k, cmd, { noremap = true, silent = true, desc = keymap.desc })
+        for _, k in ipairs(keymap) do
+            if type(k) == "string" then
+                M.set_keymap(bufnr, k, cmd)
             end
         end
+    else
+        -- Invalid type
+        return false
     end
+    return true
 end
 
 return M
