@@ -632,6 +632,7 @@ end
 
 --- Add a new item to the current category
 M.add_item = function()
+    M.utils.show_cursor()
     local input = vim.fn.input('Add new item: ')
     if input == nil or input == '' then
         return
@@ -642,10 +643,12 @@ M.add_item = function()
 
     set_category_focus(M.metadata.get_category_index(M.metadata.json.default_category) or 1)
     M.set_current_buffer_line_focus(1)
+    M.utils.hide_cursor()
 end
 
 --- Rename the current item
 M.rename_item = function()
+    M.utils.show_cursor()
     local item = M.database.items[M.state.get_current_item_id() or -1]
     if item == nil then
         M.log.error("Failed to rename item: item=nil")
@@ -658,6 +661,7 @@ M.rename_item = function()
         M.database.save_item(item)
         reload_buffer_for_category(item.category)
     end
+    M.utils.hide_cursor()
 end
 
 --- Archive the selected item
