@@ -42,10 +42,13 @@ M.init = function(opts, log)
     M.path = M.utils.concat_paths(M.opts.path, '.metadata.json')
     if M.utils.file_exists(M.path) then
         M.reload_from_file()
+        M.log.debug('Metadata loaded from file: ' .. M.path)
     else
         M.json.id = 0
         M.json.categories = M.opts.default_categories
         M.json.default_category = M.opts.default_categories[1]
+        M.save_to_file()
+        M.log.debug('Metadata initialized with default values')
     end
 end
 
@@ -97,6 +100,45 @@ M.save_to_file = function()
     if not M.utils.write_to_file(M.path, vim.fn.json_encode(M.json)) then
         M.log.error('Failed to save metadata to file: ' .. M.path)
     end
+end
+
+--- Add a new category to the categories list.
+--- @param category string The category to add.
+--- @return boolean Whether the category was added or not.
+M.add_category = function(category)
+    if M.get_category_index(category) == nil then
+        table.insert(M.json.categories, category)
+        M.save_to_file()
+        return true
+    end
+    return false
+end
+
+--- Rename a category in the categories list.
+--- @param old_category string The category to rename.
+--- @param new_category string The new name for the category.
+--- @return boolean Whether the category was renamed or not.
+M.rename_category = function(old_category, new_category)
+    local index = M.get_category_index(old_category)
+    if index ~= nil then
+        M.json.categories[index] = new_category
+        M.save_to_file()
+        return true
+    end
+    return false
+end
+
+--- Delete a category from the categories list.
+--- @param category string The category to delete.
+--- @return boolean Whether the category was deleted or not.
+M.delete_category = function(category)
+    local index = M.get_category_index(category)
+    if index ~= nil then
+        table.remove(M.json.categories, index)
+        M.save_to_file()
+        return true
+    end
+    return false
 end
 
 return M

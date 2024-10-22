@@ -38,13 +38,16 @@ local M = {
             next_item = 'j',
             prev_item = 'k',
             add_item = 'a',
+            rename_item = 'r',
             edit_item = 'e',
             end_editing = '<esc><esc>',
             archive_item = 'd',
             unarchive_item = 'u',
-            delete = 'D',
+            delete = 'x',
             open_item = '<leader>o',
-            rename = 'r',
+            add_category = 'A',
+            rename_category = 'R',
+            delete_category = 'X',
             select_item = '<cr>',
             toggle_archive = '<leader>a',
             toggle_preview = '<leader>p',
@@ -82,10 +85,6 @@ local M = {
             --- @type number
             horizontal_gap = 2,
 
-            --- Hide the cursor when the kanban board is opened.
-            --- @type boolean
-            hide_cursor = true,
-
             --- The accent color for the kanban board window.
             --- @type string
             accent_color = "#44AA44",
@@ -110,6 +109,10 @@ local M = {
             --- @type string
             selected_text_fg = "#000000",
         },
+
+        --- Hide the cursor when the kanban board is opened.
+        --- @type boolean
+        hide_cursor = true,
 
         --- Show line numbers
         --- @type boolean

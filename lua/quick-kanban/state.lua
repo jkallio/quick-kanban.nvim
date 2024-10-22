@@ -21,7 +21,11 @@ local M = {
     preview_item_id = nil,
 
     --- Window information for each Kanban category
-    --- @type table where the key is the name of the category from opts.categories
+    --- @type table where the key is the name of the category from metadata.json.categories
+    --- The value is a table with the following keys:
+    --- - `id` (number): The window id
+    --- - `bufnr` (number): The buffer number
+    --- - `selected_line` (number): The selected line in the buffer
     windows = {},
 
     --- The logger object
@@ -83,7 +87,7 @@ end
 --- @param wid integer? The window id
 M.set_wid_for_category = function(category, wid)
     if M.windows[category] == nil then
-        M.log.warn("Category not found: " .. category)
+        M.log.error("No window for category " .. category)
         M.windows[category] = {}
     end
     M.windows[category].id = wid
@@ -94,7 +98,7 @@ end
 --- @param bufnr integer? The buffer number
 M.set_buf_for_category = function(category, bufnr)
     if M.windows[category] == nil then
-        M.log.warn("Category not found: " .. category)
+        M.log.error("No window for category " .. category)
         M.windows[category] = {}
     end
     M.windows[category].bufnr = bufnr
@@ -105,6 +109,17 @@ end
 --- @return integer? The buffer number for the given category
 M.get_buf_for_category = function(category)
     return M.windows[category] and M.windows[category].bufnr or nil
+end
+
+--- Get the selected category (or assign the first category if none is selected)
+--- @return string The selected category
+M.get_selected_category = function()
+    if M.selected_category == nil then
+        for category, _ in pairs(M.windows) do
+            M.selected_category = category
+        end
+    end
+    return M.selected_category
 end
 
 --- Get selected line for the given category
@@ -119,7 +134,7 @@ end
 --- @param line integer The selected line
 M.set_selected_line_for_category = function(category, line)
     if M.windows[category] == nil then
-        M.log.warn("Category not found: " .. category)
+        M.log.error("No window for category " .. category)
         M.windows[category] = {}
     end
     M.windows[category].selected_line = line
@@ -142,6 +157,46 @@ M.check_windows_validity = function()
         end
     end
     return true
+end
+
+--- Handle category renaming
+--- @param old_name string The old name of the category
+--- @param new_name string The new name of the category
+M.handle_category_rename = function(old_name, new_name)
+    if M.selected_category == old_name then
+        M.selected_category = new_name
+    end
+    M.windows[new_name] = M.windows[old_name]
+    M.windows[old_name] = nil
+end
+
+--- Handle category deletion
+--- @param category string The name of the category
+M.handle_category_deletion = function(category)
+    if M.selected_category == category then
+        M.selected_category = nil
+    end
+    M.windows[category] = nil
+end
+
+--- Close the window for the given category
+--- @param category string The name of the category
+M.close_window = function(category)
+    local win = M.get_window(category)
+    if win == nil then
+        M.log.error("No window for category " .. category)
+        return
+    end
+
+    if vim.api.nvim_win_is_valid(win.id) then
+        vim.api.nvim_win_close(win.id, true)
+    end
+
+    if vim.api.nvim_buf_is_valid(win.bufnr or -1) then
+        vim.api.nvim_buf_delete(win.bufnr, { force = true })
+    end
+
+    M.windows[category] = nil
 end
 
 return M

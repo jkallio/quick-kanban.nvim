@@ -116,8 +116,7 @@ The following options are available:
       blend = 5,
       vertical_gap = 1,
       horizontal_gap = 2,
-      hide_cursor = true,
-      accent_color = 
+      accent_color = "#44AA44",
       hilight_color = "#FFFF44",
       active_text_bg = "#448844",
       active_text_fg = "#000000",
@@ -153,9 +152,12 @@ The following mappings are defined by default:
     r           Rename an item
     e           Edit an item under cursor
     d           Archive an item
-    D           Delete an item permanently
+    x           Delete an item (permanently!)
     u           Unarchive an item (only in archive view)
     o           Open the markdown file in a new buffer
+    A           Add a new category
+    R           Rename a category
+    X           Delete a category (permanently!)
     <return>    Select/activate an item
     <esc><esc>  Leave edit mode (only in edit view)
     <leader>a   Toggle archive view
@@ -174,13 +176,16 @@ you can assign multiple keys to a command by passing a table of keys.
       next_item = 'j',
       prev_item = 'k',
       add_item = 'a',
+      rename_item = 'r',
       edit_item = 'e',
       end_editing = '<esc><esc>',
       archive_item = 'd',
       unarchive_item = 'u',
-      delete = 'D',
-      open_item = '<leader>o',
-      rename = 'r',
+      delete = 'x',
+      open_item = 'o',
+      add_category = 'A',
+      rename_category = 'R',
+      delete_category = 'X',
       select_item = '<cr>',
       toggle_archive = '<leader>a',
       toggle_preview = '<leader>p',
@@ -227,6 +232,18 @@ insert the new title of the item. Press <cr> to confirm the new title.
 
 To open the markdown file of an item in a new buffer, select the item and
 press `o`.
+
+To add a new category, press `A`. This will open a prompt to insert the name
+of the new category. Press <cr> to confirm the name, and the new category
+will be added to the Kanban board.
+
+To rename a category, select the category and press `R`. This will open a
+prompt to insert the new name of the category. Press <cr> to confirm the
+new name.
+
+To delete a category, select the category and press `X`. This will delete
+the category and all the items in it. Be careful, as this action cannot
+be undone.
 
 To toggle the archive view, press `<leader>a`. This will show or hide the
 archive window on the right side of the Kanban board.

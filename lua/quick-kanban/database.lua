@@ -280,4 +280,26 @@ M.delete_item = function(item_id)
     M.items[item_id] = nil
 end
 
+--- Handle category renaming
+--- @param old_category string The old category name
+--- @param new_category string The new category name
+M.handle_category_rename = function(old_category, new_category)
+    for _, item in pairs(M.items) do
+        if item.category == old_category then
+            item.category = new_category
+            M.save_item(item)
+        end
+    end
+end
+
+--- Handle category deletion (delete all items in the category)
+--- @param category string The category to delete
+M.delete_all_items_in_category = function(category)
+    for _, item in pairs(M.items) do
+        if item.category == category then
+            M.delete_item(item.id)
+        end
+    end
+end
+
 return M;

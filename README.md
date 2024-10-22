@@ -95,13 +95,16 @@ require'quick-kanban'.setup({
     next_item = 'j',
     prev_item = 'k',
     add_item = 'a',
+    rename_item = 'r',
     edit_item = 'e',
     end_editing = '<esc><esc>',
     archive_item = 'd',
     unarchive_item = 'u',
-    delete = 'D',
+    delete = 'x',
     open_item = '<leader>o',
-    rename = 'r',
+    add_category = 'A',
+    rename_category = 'R',
+    delete_category = 'X',
     select_item = '<cr>',
     toggle_archive = '<leader>a',
     toggle_preview = '<leader>p',
@@ -119,7 +122,6 @@ require'quick-kanban'.setup({
     blend = 5,          -- The transparency of the kanban board window. (0-100)
     vertical_gap = 1,   -- Gap between the windows (vertical)
     horizontal_gap = 2, -- Gap between the windows (horizontal)
-    hide_cursor = true, -- Hide the cursor when the kanban is opened.
     accent_color = "#44AA44",     -- Accent color for the kanban board window.
     hilight_color = "#FFFF44",    -- Highlight color for the kanban board window.
     active_text_bg = "#448844",   -- Background color of the active item
@@ -128,6 +130,7 @@ require'quick-kanban'.setup({
     selected_text_fg = "#000000", -- Text color of the selected item.
   },
 
+  hide_cursor = true,   -- Hide the cursor when the kanban is opened.
   number = true,        -- Show line numbers in Edit mode
   wrap = true,          -- Wrap lines in Kanban category windows
   show_preview = true,  -- Show the preview window
@@ -147,11 +150,17 @@ To add a new item, press `a`. This will open a prompt to insert the title of the
 
 To archive an item, select the item and press `d`. This will move the item to the archive category. To unarchive an item, press `u` in the archive view.
 
-To delete an item permanently, select the item and press `D`. This will delete the item from the project folder. Be careful, as this action cannot be undone.
+To delete an item permanently, select the item and press `x`. This will delete the item from the project folder. Be careful, as this action cannot be undone.
 
 To rename an item, select the item and press `r`. This will open a prompt to insert the new title of the item. Press <cr> to confirm the new title.
 
 To open the markdown file of an item in a new buffer, select the item and press `o`.
+
+To add a new category, press `A`. This will open a prompt to insert the name of the new category. Press <cr> to confirm the name, and the new category will be added to the Kanban board.
+
+To rename a category, select the category and press `R`. This will open a prompt to insert the new name of the category. Press <cr> to confirm the new name.
+
+To delete a category, select the category and press `X`. This will delete the category and all the items in it. Be careful, as this action cannot be undone.
 
 To toggle the archive view, press `<leader>a`. This will show or hide the archive window on the right side of the Kanban board.
 

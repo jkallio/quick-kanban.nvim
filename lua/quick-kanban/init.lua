@@ -189,4 +189,28 @@ M.end_editing = function()
     end
 end
 
+--- Add category
+M.add_category = function()
+    if qk then
+        qk.add_category()
+    end
+end
+
+--- Rename category
+M.rename_category = function()
+    if qk then
+        qk.rename_category()
+    end
+end
+
+--- Delete category
+M.delete_category = function()
+    if qk then
+        qk.delete_category()
+    end
+end
+
+-- Set the user commands
+vim.api.nvim_create_user_command("QuickKanban", M.toggle_ui, { nargs = 0 })
+
 return M
