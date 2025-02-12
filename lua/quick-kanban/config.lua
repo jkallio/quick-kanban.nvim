@@ -87,23 +87,23 @@ local M = {
 
             --- The accent color for the kanban board window.
             --- @type string
-            accent_color = "#44AA44",
+            accent_color = "#1793D1",
 
             --- The highlight color for the kanban board window.
             --- @type string
-            hilight_color = "#FFFF44",
+            hilight_color = "#FFFF00",
 
             --- Line background color
             --- @type string
-            active_text_bg = "#448844",
+            active_text_bg = "#1793D1",
 
             --- The color of the text of the currently active item.
             --- @type string
-            active_text_fg = "#000000",
+            active_text_fg = "#FFFFFF",
 
             --- The selected text background
             --- @type string
-            selected_text_bg = "#888844",
+            selected_text_bg = "#FFFF00",
 
             --- The color of the text of the selected item.
             --- @type string
