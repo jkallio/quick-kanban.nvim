@@ -68,11 +68,6 @@ vim.api.nvim_create_autocmd("BufEnter", {
         if M == nil or M.state == nil or M.state.check_windows_validity == nil then
             return
         end
-
-        if not M.state.check_windows_validity() then
-            M.log.warn("Invalid window(s) detected; Closing UI")
-            M.close_ui()
-        end
     end
 })
 
