@@ -192,7 +192,7 @@ end
 --- Show the cursor (...by restoring the original settings)
 M.show_cursor = function()
     if vim.g.saved_cursor_blend ~= nil then
-        vim.cmd([[hi Cursor blend=vim.g.saved_cursor_blend]])
+        vim.cmd('hi Cursor blend=' .. tostring(vim.g.saved_cursor_blend))
     end
     if vim.g.saved_guicursor ~= nil then
         vim.o.guicursor = vim.g.saved_guicursor

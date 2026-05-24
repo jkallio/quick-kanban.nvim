@@ -874,7 +874,7 @@ M.end_editing = function()
     set_category_focus(window.index)
     M.set_current_buffer_line_focus(window.selected_line)
 
-    if M.opts.window.hide_cursor then
+    if M.opts.hide_cursor then
         M.utils.hide_cursor()
     end
 end

@@ -69,11 +69,11 @@ local M = {
         window = {
             --- The width of each kanban category window
             --- @type number
-            width = 40,
+            width = 50,
 
             --- The height of the kanban UI
             --- @type number
-            height = 30,
+            height = 40,
 
             --- Window title decoration (prefix and suffix)
             --- @type string[]
@@ -81,7 +81,7 @@ local M = {
 
             --- The transparency of the kanban board window.
             --- @type number
-            blend = 5,
+            blend = 0,
 
             --- The gap between the kanban board windows (vertical)
             --- @type number
