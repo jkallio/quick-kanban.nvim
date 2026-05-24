@@ -115,9 +115,8 @@ end
 --- @return string The selected category
 M.get_selected_category = function()
     if M.selected_category == nil then
-        for category, _ in pairs(M.windows) do
-            M.selected_category = category
-        end
+        local cats = M.metadata.get_categories()
+        M.selected_category = cats[1]
     end
     return M.selected_category
 end

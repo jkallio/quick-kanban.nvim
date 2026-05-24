@@ -54,17 +54,9 @@ end
 --- @return table items The archived items
 M.get_archived_items = function()
     local items = {}
-    local archive_path = M.utils.concat_paths(M.opts.path, M.opts.subdirectories.archive)
-    if M.utils.directory_exists(archive_path) then
-        local file_list = vim.fn.readdir(archive_path)
-        for _, file_name in ipairs(file_list) do
-            local file_path = M.utils.concat_paths(archive_path, file_name)
-            if M.utils.file_exists(file_path) then
-                local item = vim.fn.json_decode(M.utils.read_file_as_string(file_path))
-                table.insert(items, item)
-            else
-                M.log.error("File not found: " .. file_path)
-            end
+    for _, item in pairs(M.items) do
+        if item.is_archived then
+            table.insert(items, item)
         end
     end
     return items
@@ -181,16 +173,32 @@ M.reload_item_files = function()
         end
     end
 
+    local archive_path = M.utils.concat_paths(M.opts.path, M.opts.subdirectories.archive)
+    if M.utils.directory_exists(archive_path) then
+        for _, file_name in ipairs(vim.fn.readdir(archive_path)) do
+            local file_path = M.utils.concat_paths(archive_path, file_name)
+            if M.utils.file_exists(file_path) then
+                local item = vim.fn.json_decode(M.utils.read_file_as_string(file_path))
+                item.is_archived = true
+                M.items[item.id] = item
+            else
+                M.log.error("File not found: " .. file_path)
+            end
+        end
+    end
+
     -- Migrate: build per-category order from legacy item.order fields when absent
     -- TODO: This is for backwards compatibility only (will be deprecated in the future)
     if next(M.metadata.json.order) == nil then
         local by_category = {}
         for _, item in pairs(M.items) do
-            local cat = item.category
-            if by_category[cat] == nil then
-                by_category[cat] = {}
+            if not item.is_archived then
+                local cat = item.category
+                if by_category[cat] == nil then
+                    by_category[cat] = {}
+                end
+                table.insert(by_category[cat], item)
             end
-            table.insert(by_category[cat], item)
         end
         for cat, cat_items in pairs(by_category) do
             table.sort(cat_items, function(a, b) return (a.order or 0) < (b.order or 0) end)
@@ -225,7 +233,7 @@ M.reload_item_files = function()
 
     -- Append any items on disk that are missing from all order arrays
     for _, item in pairs(M.items) do
-        if not tracked[item.id] then
+        if not item.is_archived and not tracked[item.id] then
             dirty = true
             M.log.warn("Adding untracked item [" .. item.id .. "] to order for category '" .. item.category .. "'")
             local order = M.metadata.json.order[item.category] or {}
@@ -309,7 +317,6 @@ M.archive_item = function(item_id)
     M.metadata.set_order(item.category, order)
 
     item.is_archived = true
-    M.items[item_id] = nil
     M.utils.move_file(
         M.utils.concat_paths(M.opts.path, M.opts.subdirectories.items, item.id),
         M.utils.concat_paths(M.opts.path, M.opts.subdirectories.archive, item.id)
