@@ -44,7 +44,7 @@ M.init = function(opts, log)
         M.reload_from_file()
         M.log.debug('Metadata loaded from file: ' .. M.path)
     else
-        M.json.id = 0
+        M.json.id_pool = 0
         M.json.categories = M.opts.default_categories
         M.json.default_category = M.opts.default_categories[1]
         M.save_to_file()

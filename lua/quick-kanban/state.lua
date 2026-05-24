@@ -46,7 +46,7 @@ end
 --- @return table? The window table for the category (or `nil` if the category does not exist)
 M.get_window = function(category)
     if category == nil then
-        M.log.error("Invalid category: " .. category)
+        M.log.error("Invalid category: " .. tostring(category))
         return nil
     end
     return M.windows[category]

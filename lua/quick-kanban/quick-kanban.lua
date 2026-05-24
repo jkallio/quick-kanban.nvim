@@ -61,16 +61,6 @@ vim.api.nvim_create_autocmd('WinLeave', {
     end
 })
 
--- Set up an autocommand to trigger on buffer enter
-vim.api.nvim_create_autocmd("BufEnter", {
-    group = vim.api.nvim_create_augroup("MonitorBufferChange", { clear = true }),
-    callback = function()
-        if M == nil or M.state == nil or M.state.check_windows_validity == nil then
-            return
-        end
-    end
-})
-
 
 -------------------------------------------------------------------------------
 --- Local Helper functions
@@ -164,7 +154,7 @@ local set_category_focus = function(index)
 
     if cur_category == nil or new_category == nil then
         M.log.error("Invalid argument(s): "
-            .. "cur_category=" .. (cur_cateogry or "nil") .. "; "
+            .. "cur_category=" .. (cur_category or "nil") .. "; "
             .. "new_cateogory=" .. (new_category or "nil"))
         M.close_ui()
         return false
