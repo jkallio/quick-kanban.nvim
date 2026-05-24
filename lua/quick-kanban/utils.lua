@@ -64,6 +64,24 @@ M.touch_directory = function(path)
     return vim.fn.mkdir(path, 'p') ~= 0
 end
 
+--- Read file contents as a single string
+--- @param path string The path to the file
+--- @return string The contents of the file
+M.read_file_as_string = function(path)
+    if path == nil then
+        return ""
+    end
+
+    local file = io.open(path, 'r')
+    if file == nil then
+        return ""
+    end
+
+    local content = file:read('*a')
+    file:close()
+    return content
+end
+
 --- Read file contents into a table
 --- @param path string The path to the file
 --- @return string[] The contents of the file

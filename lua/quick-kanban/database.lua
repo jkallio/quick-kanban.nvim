@@ -67,7 +67,7 @@ M.get_archived_items = function()
         for _, file_name in ipairs(file_list) do
             local file_path = M.utils.concat_paths(archive_path, file_name)
             if M.utils.file_exists(file_path) then
-                local item = vim.fn.json_decode(M.utils.read_file_contents(file_path))
+                local item = vim.fn.json_decode(M.utils.read_file_as_string(file_path))
                 table.insert(items, item)
             else
                 M.log.error("File not found: " .. file_path)
@@ -161,7 +161,7 @@ M.reload_item_files = function()
     for _, file_name in ipairs(file_list) do
         local file_path = M.utils.concat_paths(items_path, file_name)
         if M.utils.file_exists(file_path) then
-            local item = vim.fn.json_decode(M.utils.read_file_contents(file_path))
+            local item = vim.fn.json_decode(M.utils.read_file_as_string(file_path))
             M.items[item.id] = item
         else
             M.log.error("File not found: " .. file_path)
