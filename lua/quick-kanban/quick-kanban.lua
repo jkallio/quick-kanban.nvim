@@ -638,10 +638,11 @@ M.add_item = function()
         return
     end
 
-    M.database.add_item(M.metadata.json.default_category, input)
-    reload_buffer_for_category(M.metadata.json.default_category)
+    local category = M.state.get_selected_category()
+    M.database.add_item(category, input)
+    reload_buffer_for_category(category)
 
-    set_category_focus(M.metadata.get_category_index(M.metadata.json.default_category) or 1)
+    set_category_focus(M.metadata.get_category_index(category) or 1)
     M.set_current_buffer_line_focus(1)
     if M.opts.hide_cursor then
         M.utils.hide_cursor()
