@@ -30,7 +30,11 @@ M.json = {
 
     --- The default category for the items
     --- @type string
-    default_category = ""
+    default_category = "",
+
+    --- Ordered list of item IDs per category (category_name -> number[])
+    --- @type table
+    order = {}
 }
 
 --- Initialize the metadata module
@@ -90,6 +94,7 @@ M.reload_from_file = function()
     local ok, json = pcall(vim.fn.json_decode, M.utils.read_file_contents(M.path))
     if ok and json ~= nil then
         M.json = json
+        M.json.order = M.json.order or {}
     else
         M.log.error('Failed to decode JSON file: ' .. M.path)
     end
@@ -114,6 +119,21 @@ M.add_category = function(category)
     return false
 end
 
+--- Get the ordered item ID list for a category.
+--- @param category string The category name.
+--- @return table ids Ordered list of item IDs (may be empty).
+M.get_order = function(category)
+    return M.json.order[category] or {}
+end
+
+--- Set the ordered item ID list for a category and persist to disk.
+--- @param category string The category name.
+--- @param ids table Ordered list of item IDs.
+M.set_order = function(category, ids)
+    M.json.order[category] = ids
+    M.save_to_file()
+end
+
 --- Rename a category in the categories list.
 --- @param old_category string The category to rename.
 --- @param new_category string The new name for the category.
@@ -122,6 +142,8 @@ M.rename_category = function(old_category, new_category)
     local index = M.get_category_index(old_category)
     if index ~= nil then
         M.json.categories[index] = new_category
+        M.json.order[new_category] = M.json.order[old_category]
+        M.json.order[old_category] = nil
         M.save_to_file()
         return true
     end
@@ -135,6 +157,7 @@ M.delete_category = function(category)
     local index = M.get_category_index(category)
     if index ~= nil then
         table.remove(M.json.categories, index)
+        M.json.order[category] = nil
         M.save_to_file()
         return true
     end

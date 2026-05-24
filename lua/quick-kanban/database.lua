@@ -35,25 +35,18 @@ M.init = function(opts, metadata, log)
     end
 end
 
---- Get the items for the specified category.
+--- Get the items for the specified category in their stored order.
 --- @param category string The name of the category
---- @return table The items for the specified category sorted by order
+--- @return table The items for the specified category in order
 M.get_items_for_category_sorted = function(category)
+    local order = M.metadata.get_order(category)
     local items = {}
-    for _, item in pairs(M.items) do
-        if item.category == category then
+    for _, id in ipairs(order) do
+        local item = M.items[id]
+        if item ~= nil then
             table.insert(items, item)
         end
     end
-
-    table.sort(items, function(a, b)
-        return a.order < b.order
-    end)
-
-    for i, item in ipairs(items) do
-        item.order = i
-    end
-
     return items
 end
 
@@ -111,8 +104,24 @@ M.move_item_to_category = function(item_id, category)
         return false
     end
 
+    -- Remove from old category order
+    local old_order = M.metadata.get_order(item.category)
+    for i, id in ipairs(old_order) do
+        if id == item_id then
+            table.remove(old_order, i)
+            break
+        end
+    end
+    M.metadata.json.order[item.category] = old_order
+
+    -- Prepend to new category order
+    local new_order = M.metadata.get_order(category)
+    table.insert(new_order, 1, item_id)
+    M.metadata.json.order[category] = new_order
+
+    M.metadata.save_to_file()
+
     item.category = category
-    item.order = 0
     M.save_item(item)
     return true
 end
@@ -128,22 +137,26 @@ M.move_item_within_category = function(item_id, increment)
         return false
     end
 
-    local new_pos = item.order + increment
-    local items = M.get_items_for_category_sorted(item.category)
-
-    -- Increment/decrement the order of the items in the category
-    for _, category_item in ipairs(items) do
-        if increment < 0 and category_item.order >= new_pos and category_item.order < item.order then
-            category_item.order = category_item.order + 1
-            M.save_item(category_item)
-        elseif increment > 0 and category_item.order <= new_pos and category_item.order > item.order then
-            category_item.order = category_item.order - 1
-            M.save_item(category_item)
+    local order = M.metadata.get_order(item.category)
+    local pos = nil
+    for i, id in ipairs(order) do
+        if id == item_id then
+            pos = i
+            break
         end
     end
 
-    item.order = new_pos
-    M.save_item(item)
+    if pos == nil then
+        return false
+    end
+
+    local new_pos = math.max(1, math.min(#order, pos + increment))
+    if new_pos == pos then
+        return true
+    end
+    table.remove(order, pos)
+    table.insert(order, new_pos, item_id)
+    M.metadata.set_order(item.category, order)
     return true
 end
 
@@ -167,6 +180,64 @@ M.reload_item_files = function()
             M.log.error("File not found: " .. file_path)
         end
     end
+
+    -- Migrate: build per-category order from legacy item.order fields when absent
+    -- TODO: This is for backwards compatibility only (will be deprecated in the future)
+    if next(M.metadata.json.order) == nil then
+        local by_category = {}
+        for _, item in pairs(M.items) do
+            local cat = item.category
+            if by_category[cat] == nil then
+                by_category[cat] = {}
+            end
+            table.insert(by_category[cat], item)
+        end
+        for cat, cat_items in pairs(by_category) do
+            table.sort(cat_items, function(a, b) return (a.order or 0) < (b.order or 0) end)
+            local ids = {}
+            for _, item in ipairs(cat_items) do
+                table.insert(ids, item.id)
+            end
+            M.metadata.json.order[cat] = ids
+        end
+        M.metadata.save_to_file()
+    end
+
+    -- Sanity check: reconcile order arrays against actual item files
+    local dirty = false
+
+    -- Build a set of IDs already tracked in order arrays
+    -- TODO: This is for backwards compatibility only (will be deprecated in the future)
+    local tracked = {}
+    for cat, ids in pairs(M.metadata.json.order) do
+        local clean = {}
+        for _, id in ipairs(ids) do
+            if M.items[id] ~= nil then
+                table.insert(clean, id)
+                tracked[id] = true
+            else
+                dirty = true
+                M.log.warn("Removing stale id [" .. id .. "] from order for category '" .. cat .. "'")
+            end
+        end
+        M.metadata.json.order[cat] = clean
+    end
+
+    -- Append any items on disk that are missing from all order arrays
+    for _, item in pairs(M.items) do
+        if not tracked[item.id] then
+            dirty = true
+            M.log.warn("Adding untracked item [" .. item.id .. "] to order for category '" .. item.category .. "'")
+            local order = M.metadata.json.order[item.category] or {}
+            table.insert(order, item.id)
+            M.metadata.json.order[item.category] = order
+        end
+    end
+
+    if dirty then
+        M.metadata.save_to_file()
+    end
+
     return true
 end
 
@@ -203,22 +274,19 @@ end
 --- @param category string The category to add the item to
 --- @param title string The title of the item
 M.add_item = function(category, title)
-    local items = M.get_items_for_category_sorted(category)
-    for _, item in ipairs(items) do
-        item.order = item.order + 1
-        M.save_item(item)
-    end
-
     local item = {
         id = M.metadata.next_id(),
         title = title,
         category = category,
-        order = 1,
         attachment_path = nil,
         created = os.date("%Y-%m-%d %H:%M:%S"),
     }
     M.items[item.id] = item
     M.save_item(item)
+
+    local order = M.metadata.get_order(category)
+    table.insert(order, 1, item.id)
+    M.metadata.set_order(category, order)
 end
 
 --- Archive given item
@@ -230,6 +298,15 @@ M.archive_item = function(item_id)
         M.log.error("Failed to archive item: Item id [" .. item_id .. "] not found!")
         return nil
     end
+
+    local order = M.metadata.get_order(item.category)
+    for i, id in ipairs(order) do
+        if id == item_id then
+            table.remove(order, i)
+            break
+        end
+    end
+    M.metadata.set_order(item.category, order)
 
     item.is_archived = true
     M.items[item_id] = nil
@@ -253,6 +330,9 @@ M.unarchive_item = function(item_id)
                 M.utils.concat_paths(M.opts.path, M.opts.subdirectories.archive, item.id),
                 M.utils.concat_paths(M.opts.path, M.opts.subdirectories.items, item.id)
             )
+            local order = M.metadata.get_order(item.category)
+            table.insert(order, 1, item_id)
+            M.metadata.set_order(item.category, order)
             return item
         end
     end
@@ -262,6 +342,18 @@ end
 --- Delete given item
 --- @param item_id number The id of the item to delete
 M.delete_item = function(item_id)
+    local item = M.items[item_id]
+    if item ~= nil then
+        local order = M.metadata.get_order(item.category)
+        for i, id in ipairs(order) do
+            if id == item_id then
+                table.remove(order, i)
+                break
+            end
+        end
+        M.metadata.set_order(item.category, order)
+    end
+
     local item_path = M.utils.concat_paths(M.opts.path, M.opts.subdirectories.items, item_id)
     if M.utils.file_exists(item_path) then
         M.utils.delete_file(item_path)
