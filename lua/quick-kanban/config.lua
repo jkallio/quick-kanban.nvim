@@ -4,9 +4,15 @@ local M = {
     --- @class quick-kanban.config.options Configuration options for the quick-kanban plugin. These can be overriden by calling the `setup` function.
     options = {
         --- Full path to directory where the kanban board data will be stored.
-        --- On default the '/quick-kanban' directory will be created in the current working directory.
+        --- On default the directory will be created in the current working directory.
+        --- Takes precedence over `directory_name` when set.
         --- @type string?
         path = nil,
+
+        --- Name of the directory created in the current working directory.
+        --- Only used when `path` is nil. Defaults to ".quick-kanban".
+        --- @type string?
+        directory_name = nil,
 
         --- Log level for the plugin
         --- @type "debug" | "info" | "warn" | "error" | nil
@@ -142,7 +148,8 @@ function M.init(opts)
     -- Set default path if no path was given
     if not M.options.path then
         local utils = require('quick-kanban.utils')
-        M.options.path = utils.concat_paths(utils.get_working_directory_path(), ".quick-kanban")
+        local dir_name = M.options.directory_name or ".quick-kanban"
+        M.options.path = utils.concat_paths(utils.get_working_directory_path(), dir_name)
     end
 end
 

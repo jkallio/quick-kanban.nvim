@@ -67,7 +67,12 @@ the `setup` function.
 require'quick-kanban'.setup({
   -- Full path to directory where the kanban board data will be stored.
   -- Leave nil to create the directory in the current working directory.
+  -- Takes precedence over `directory_name` when set.
   path = nil,
+
+  -- Name of the directory created in the current working directory.
+  -- Only used when `path` is nil. Defaults to ".quick-kanban".
+  directory_name = nil,
 
   -- Log level for the plugin. Set to nil to disable logging.
   -- Possible values: "debug" | "info" | "warn" | "error" | nil
