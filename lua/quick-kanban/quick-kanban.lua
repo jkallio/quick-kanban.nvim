@@ -280,6 +280,230 @@ local get_help_text_lines = function(mappings)
 end
 
 -------------------------------------------------------------------------------
+--- Window management helpers
+-------------------------------------------------------------------------------
+
+--- Calculate the layout dimensions for the current board state
+--- @return number win_width, number win_height, number win_pos_left
+local calc_layout = function()
+    local ui = vim.api.nvim_list_uis()[1]
+    local win_width = vim.fn.min({ M.opts.window.width, vim.fn.floor(ui.width / #M.metadata.json.categories) })
+    local win_height = vim.fn.min({
+        M.opts.window.height - 2 * M.opts.window.vertical_gap,
+        (ui.height - 3) - 2 * M.opts.window.vertical_gap
+    })
+    local win_pos_left = vim.fn.floor(ui.width / 2 - (win_width * #M.metadata.json.categories / 2)) -
+        (M.opts.show_archive and (win_width / 2) or 0)
+    if M.opts.show_preview then
+        win_height = vim.fn.floor(win_height / 2)
+    end
+    return win_width, win_height, win_pos_left
+end
+
+--- Set buffer options for a column window buffer
+--- @param bufnr number
+local set_buffer_options = function(bufnr)
+    vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
+    vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
+    vim.api.nvim_set_option_value('modifiable', false, { buf = bufnr })
+end
+
+--- Set window options for a column window
+--- @param wid number
+local set_window_options = function(wid)
+    vim.api.nvim_set_option_value('relativenumber', false, { win = wid })
+    vim.api.nvim_set_option_value('cursorline', true, { win = wid })
+    vim.api.nvim_set_option_value('cursorcolumn', false, { win = wid })
+    vim.api.nvim_set_option_value('cursorlineopt', 'both', { win = wid })
+    vim.api.nvim_set_option_value('number', false, { win = wid })
+    vim.api.nvim_set_option_value('winblend', M.opts.window.blend, { win = wid })
+    vim.api.nvim_set_option_value('wrap', M.opts.wrap, { win = wid })
+    vim.api.nvim_set_option_value('linebreak', M.opts.wrap, { win = wid })
+    vim.api.nvim_win_set_hl_ns(wid, WIN_HILIGHT_INACTIVE)
+end
+
+--- Disable default vim keys in a buffer
+--- @param bufnr number
+--- @param keys string[]
+local disable_keys = function(bufnr, keys)
+    for _, key in ipairs(keys) do
+        M.utils.set_keymap(bufnr, string.lower(key), '<nop>')
+        M.utils.set_keymap(bufnr, string.upper(key), '<nop>')
+    end
+end
+
+--- Set keymaps for a kanban buffer
+--- @param bufnr number
+--- @param mappings table
+local set_mappings = function(bufnr, mappings)
+    M.utils.set_keymap(bufnr, mappings.show_help, ':lua require("quick-kanban").show_help_text()<cr>')
+    M.utils.set_keymap(bufnr, mappings.archive_item, ':lua require("quick-kanban").archive_item()<cr>')
+    M.utils.set_keymap(bufnr, mappings.toggle_archive, ':lua require("quick-kanban").toggle_archive_window()<cr>')
+    M.utils.set_keymap(bufnr, mappings.toggle_preview, ':lua require("quick-kanban").toggle_preview_window()<cr>')
+    M.utils.set_keymap(bufnr, mappings.add_item, ':lua require("quick-kanban").add_item()<cr>')
+    M.utils.set_keymap(bufnr, mappings.edit_item, ':lua require("quick-kanban").edit_item()<cr>')
+    M.utils.set_keymap(bufnr, mappings.delete, ':lua require("quick-kanban").delete_item()<cr>')
+    M.utils.set_keymap(bufnr, mappings.quit, ':lua require("quick-kanban").close_ui()<cr>')
+    M.utils.set_keymap(bufnr, mappings.next_category, ':lua require("quick-kanban").next_category()<cr>')
+    M.utils.set_keymap(bufnr, mappings.prev_category, ':lua require("quick-kanban").prev_category()<cr>')
+    M.utils.set_keymap(bufnr, mappings.next_item, ':lua require("quick-kanban").next_item()<cr>')
+    M.utils.set_keymap(bufnr, mappings.prev_item, ':lua require("quick-kanban").prev_item()<cr>')
+    M.utils.set_keymap(bufnr, mappings.open_item, ':lua require("quick-kanban").open_item()<cr>')
+    M.utils.set_keymap(bufnr, mappings.select_item, ':lua require("quick-kanban").select_item()<cr>')
+    M.utils.set_keymap(bufnr, mappings.rename_item, ':lua require("quick-kanban").rename_item()<cr>')
+    M.utils.set_keymap(bufnr, mappings.add_category, ':lua require("quick-kanban").add_category()<cr>')
+    M.utils.set_keymap(bufnr, mappings.rename_category, ':lua require("quick-kanban").rename_category()<cr>')
+    M.utils.set_keymap(bufnr, mappings.delete_category, ':lua require("quick-kanban").delete_category()<cr>')
+end
+
+--- Create a single column window for a category
+--- @param category string
+--- @param index number 1-based column position
+--- @param win_width number
+--- @param win_height number
+--- @param win_pos_left number
+local create_column_window = function(category, index, win_width, win_height, win_pos_left)
+    local wid, bufnr = M.utils.open_popup_window(
+        (M.opts.window.title_decoration[1] .. category .. M.opts.window.title_decoration[2]),
+        { width = win_width, height = win_height },
+        {
+            col = win_pos_left + (index - 1) * (win_width + M.opts.window.horizontal_gap),
+            row = M.opts.window.vertical_gap
+        }, false)
+
+    M.state.set_wid_for_category(category, wid)
+    M.state.set_buf_for_category(category, bufnr)
+    M.state.windows[category].index = index
+
+    set_window_options(wid)
+    set_buffer_options(bufnr)
+    disable_keys(bufnr, M.opts.disabled_keys)
+    set_mappings(bufnr, M.opts.mappings)
+    reload_buffer_for_category(category)
+end
+
+--- Create the preview window
+--- @param win_width number
+--- @param win_height number
+--- @param win_pos_left number
+local create_preview_window = function(win_width, win_height, win_pos_left)
+    local total_width = vim.fn.round(#M.metadata.json.categories * win_width) +
+        (#M.metadata.json.categories - 1) * M.opts.window.horizontal_gap
+    local wid, bufnr = M.utils.open_popup_window("",
+        { width = total_width, height = win_height },
+        { col = win_pos_left, row = win_height + 1 + M.opts.window.vertical_gap * 2 }, false)
+
+    M.state.windows[PREVIEW_KEY] = { id = wid, bufnr = bufnr }
+
+    local help_text = get_help_text_lines(M.opts.mappings)
+    vim.api.nvim_buf_set_lines(bufnr, 1, -1, false, help_text)
+    vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
+    vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
+    vim.api.nvim_set_option_value('modifiable', false, { buf = bufnr })
+    vim.api.nvim_set_option_value('winblend', M.opts.window.blend, { win = wid })
+    vim.api.nvim_set_option_value('wrap', false, { win = wid })
+    vim.api.nvim_set_option_value('linebreak', false, { win = wid })
+    vim.api.nvim_win_set_hl_ns(wid, WIN_HILIGHT_ACTIVE)
+    disable_keys(bufnr, M.opts.disabled_keys)
+end
+
+--- Create the archive window
+--- @param win_width number
+--- @param win_height number
+--- @param win_pos_left number
+local create_archive_window = function(win_width, win_height, win_pos_left)
+    local wid, bufnr = M.utils.open_popup_window(
+        (M.opts.window.title_decoration[1] .. "Archive" .. M.opts.window.title_decoration[2]),
+        {
+            width = win_width,
+            height = win_height + (M.opts.show_preview and (win_height + M.opts.window.vertical_gap * 2) or 0)
+        },
+        {
+            col = win_pos_left + #M.metadata.json.categories * (win_width + M.opts.window.horizontal_gap),
+            row = M.opts.window.vertical_gap
+        }, false)
+
+    M.state.windows[ARCHIVE_KEY] = { id = wid, bufnr = bufnr }
+
+    set_window_options(wid)
+    set_buffer_options(bufnr)
+    disable_keys(bufnr, M.opts.disabled_keys)
+    set_mappings(bufnr, M.opts.mappings)
+    M.utils.set_keymap(bufnr, M.opts.mappings.archive_item,
+        ':lua require("quick-kanban").unarchive_item()<cr>')
+    M.utils.set_keymap(bufnr, M.opts.mappings.unarchive_item,
+        ':lua require("quick-kanban").unarchive_item()<cr>')
+    reload_buffer_for_category(ARCHIVE_KEY)
+end
+
+--- Close and clean up a side panel window without touching column windows
+--- @param key string PREVIEW_KEY or ARCHIVE_KEY
+local close_side_panel = function(key)
+    local win = M.state.get_window(key)
+    if win == nil then return end
+    if vim.api.nvim_win_is_valid(win.id or -1) then
+        vim.api.nvim_win_close(win.id, true)
+    end
+    if vim.api.nvim_buf_is_valid(win.bufnr or -1) then
+        vim.api.nvim_buf_delete(win.bufnr, { force = true })
+    end
+    M.state.windows[key] = nil
+end
+
+--- Reposition and resize all existing open windows to match the current board state.
+--- Uses `M.opts.show_preview`, `M.opts.show_archive`, and `M.metadata.json.categories`
+--- to recalculate the layout, then calls `nvim_win_set_config` on each valid window.
+--- @return number win_width, number win_height, number win_pos_left
+local relayout_windows = function()
+    local win_width, win_height, win_pos_left = calc_layout()
+
+    for i, category in ipairs(M.metadata.json.categories) do
+        local win = M.state.get_window(category)
+        if win and vim.api.nvim_win_is_valid(win.id or -1) then
+            vim.api.nvim_win_set_config(win.id, {
+                relative = 'editor',
+                width = win_width,
+                height = win_height,
+                row = M.opts.window.vertical_gap,
+                col = win_pos_left + (i - 1) * (win_width + M.opts.window.horizontal_gap),
+            })
+            M.state.windows[category].index = i
+        end
+    end
+
+    if M.opts.show_preview then
+        local preview_win = M.state.get_window(PREVIEW_KEY)
+        if preview_win and vim.api.nvim_win_is_valid(preview_win.id or -1) then
+            local total_width = vim.fn.round(#M.metadata.json.categories * win_width) +
+                (#M.metadata.json.categories - 1) * M.opts.window.horizontal_gap
+            vim.api.nvim_win_set_config(preview_win.id, {
+                relative = 'editor',
+                width = total_width,
+                height = win_height,
+                row = win_height + 1 + M.opts.window.vertical_gap * 2,
+                col = win_pos_left,
+            })
+        end
+    end
+
+    if M.opts.show_archive then
+        local archive_win = M.state.get_window(ARCHIVE_KEY)
+        if archive_win and vim.api.nvim_win_is_valid(archive_win.id or -1) then
+            vim.api.nvim_win_set_config(archive_win.id, {
+                relative = 'editor',
+                width = win_width,
+                height = win_height +
+                    (M.opts.show_preview and (win_height + M.opts.window.vertical_gap * 2) or 0),
+                row = M.opts.window.vertical_gap,
+                col = win_pos_left + #M.metadata.json.categories * (win_width + M.opts.window.horizontal_gap),
+            })
+        end
+    end
+
+    return win_width, win_height, win_pos_left
+end
+
+-------------------------------------------------------------------------------
 --- Public Module functions
 -------------------------------------------------------------------------------
 
@@ -405,169 +629,22 @@ M.open_ui = function()
         end
     end
 
-    --- Local helper function for setting buffer options for a category window
-    --- @param bufnr number The buffer number
-    local function set_buffer_options(bufnr)
-        vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
-        vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
-        vim.api.nvim_set_option_value('modifiable', false, { buf = bufnr })
-    end
-
-    --- Local helper function for setting window options for a category window
-    --- @param wid number The window id
-    --- @param opts table The options for the window
-    local function set_window_options(wid, opts)
-        vim.api.nvim_set_option_value('relativenumber', false, { win = wid })
-        vim.api.nvim_set_option_value('cursorline', true, { win = wid })
-        vim.api.nvim_set_option_value('cursorcolumn', false, { win = wid })
-        vim.api.nvim_set_option_value('cursorlineopt', 'both', { win = wid })
-        vim.api.nvim_set_option_value('number', false, { win = wid })
-        vim.api.nvim_set_option_value('winblend', opts.window.blend, { win = wid })
-        vim.api.nvim_set_option_value('wrap', opts.wrap, { win = wid })
-        vim.api.nvim_set_option_value('linebreak', opts.wrap, { win = wid })
-        vim.api.nvim_win_set_hl_ns(wid, WIN_HILIGHT_INACTIVE)
-    end
-
-    --- Local helper function to disable default vim keys
-    local function disable_keys(bufnr, keys)
-        for _, key in ipairs(keys) do
-            M.utils.set_keymap(bufnr, string.lower(key), '<nop>')
-            M.utils.set_keymap(bufnr, string.upper(key), '<nop>')
-        end
-    end
-
-    --- Local helper function for setting keymaps for a buffer
-    local function set_mappings(bufnr, mappings)
-        M.utils.set_keymap(bufnr, mappings.show_help, ':lua require("quick-kanban").show_help_text()<cr>')
-        M.utils.set_keymap(bufnr, mappings.archive_item, ':lua require("quick-kanban").archive_item()<cr>')
-        M.utils.set_keymap(bufnr, mappings.toggle_archive, ':lua require("quick-kanban").toggle_archive_window()<cr>')
-        M.utils.set_keymap(bufnr, mappings.toggle_preview, ':lua require("quick-kanban").toggle_preview_window()<cr>')
-        M.utils.set_keymap(bufnr, mappings.add_item, ':lua require("quick-kanban").add_item()<cr>')
-        M.utils.set_keymap(bufnr, mappings.edit_item, ':lua require("quick-kanban").edit_item()<cr>')
-        M.utils.set_keymap(bufnr, mappings.delete, ':lua require("quick-kanban").delete_item()<cr>')
-        M.utils.set_keymap(bufnr, mappings.quit, ':lua require("quick-kanban").close_ui()<cr>')
-        M.utils.set_keymap(bufnr, mappings.next_category, ':lua require("quick-kanban").next_category()<cr>')
-        M.utils.set_keymap(bufnr, mappings.prev_category, ':lua require("quick-kanban").prev_category()<cr>')
-        M.utils.set_keymap(bufnr, mappings.next_item, ':lua require("quick-kanban").next_item()<cr>')
-        M.utils.set_keymap(bufnr, mappings.prev_item, ':lua require("quick-kanban").prev_item()<cr>')
-        M.utils.set_keymap(bufnr, mappings.open_item, ':lua require("quick-kanban").open_item()<cr>')
-        M.utils.set_keymap(bufnr, mappings.select_item, ':lua require("quick-kanban").select_item()<cr>')
-        M.utils.set_keymap(bufnr, mappings.rename_item, ':lua require("quick-kanban").rename_item()<cr>')
-        M.utils.set_keymap(bufnr, mappings.add_category, ':lua require("quick-kanban").add_category()<cr>')
-        M.utils.set_keymap(bufnr, mappings.rename_category, ':lua require("quick-kanban").rename_category()<cr>')
-        M.utils.set_keymap(bufnr, mappings.delete_category, ':lua require("quick-kanban").delete_category()<cr>')
-    end
-
     if M.opts.hide_cursor then
         M.utils.hide_cursor()
     end
 
-    -- Get the main UI (1st element in the ui list)
-    local ui = vim.api.nvim_list_uis()[1]
-    local win_width = vim.fn.min({ M.opts.window.width, vim.fn.floor(ui.width / #M.metadata.json.categories) })
-    local win_height = vim.fn.min({ M.opts.window.height - 2 * M.opts.window.vertical_gap, (ui.height - 3) -
-    2 * M.opts.window.vertical_gap })
-    local win_pos_left = vim.fn.floor(ui.width / 2 - (win_width * #M.metadata.json.categories / 2)) -
-        (M.opts.show_archive and (win_width / 2) or 0)
-    if M.opts.show_preview then
-        win_height = vim.fn.floor(win_height / 2)
-    end
+    local win_width, win_height, win_pos_left = calc_layout()
 
-    -- Create a window for each category
     for i, category in ipairs(M.metadata.json.categories) do
-        --M.log.debug("Creating window for category: " .. category)
-        local win_size = {
-            width = win_width,
-            height = win_height
-        }
-        local win_pos = {
-            col = win_pos_left + (i - 1) * (win_width + M.opts.window.horizontal_gap),
-            row = M.opts.window.vertical_gap
-        }
-        local wid, bufnr = M.utils.open_popup_window(
-            (M.opts.window.title_decoration[1] .. category .. M.opts.window.title_decoration[2]),
-            win_size, win_pos)
-
-        M.state.set_wid_for_category(category, wid)
-        M.state.set_buf_for_category(category, bufnr)
-
-        set_window_options(wid, M.opts)
-        set_buffer_options(bufnr)
-        disable_keys(bufnr, M.opts.disabled_keys)
-        set_mappings(bufnr, M.opts.mappings)
-
-        --M.state.windows[category].selected_line = M.state.windows[category].selected_line or 1
-        reload_buffer_for_category(category)
+        create_column_window(category, i, win_width, win_height, win_pos_left)
     end
 
-    --- Create preview window
     if M.opts.show_preview then
-        local wid, bufnr = M.utils.open_popup_window("",
-            {
-                width = vim.fn.round(#M.metadata.json.categories * win_width) +
-                    (#M.metadata.json.categories - 1) * M.opts.window.horizontal_gap,
-                height = win_height
-            },
-            {
-                col = win_pos_left,
-                row = win_height + 1 + M.opts.window.vertical_gap * 2
-            })
-
-        M.state.windows[PREVIEW_KEY] = {}
-        M.state.windows[PREVIEW_KEY].id = wid
-        M.state.windows[PREVIEW_KEY].bufnr = bufnr
-
-        -- Create a help text buffer for the default preview window
-        local help_text = get_help_text_lines(M.opts.mappings)
-        vim.api.nvim_buf_set_lines(bufnr, 1, -1, false, help_text)
-
-        -- Set the buffer options
-        vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
-        vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
-        vim.api.nvim_set_option_value('modifiable', false, { buf = bufnr })
-
-        -- Set the window options
-        vim.api.nvim_set_option_value('winblend', M.opts.window.blend, { win = wid })
-        vim.api.nvim_set_option_value('wrap', false, { win = wid })
-        vim.api.nvim_set_option_value('linebreak', false, { win = wid })
-
-        -- On default, set the hilight to inactive
-        vim.api.nvim_win_set_hl_ns(wid, WIN_HILIGHT_ACTIVE)
-
-        --- Disable default keys for the preview window
-        disable_keys(bufnr, M.opts.disabled_keys)
+        create_preview_window(win_width, win_height, win_pos_left)
     end
 
-    --- Create the archive window
     if M.opts.show_archive then
-        local wid, bufnr = M.utils.open_popup_window(
-            (M.opts.window.title_decoration[1] .. "Archive" .. M.opts.window.title_decoration[2]),
-            {
-                width = win_width,
-                height = win_height +
-                    (M.opts.show_preview and (win_height + M.opts.window.vertical_gap * 2) or 0)
-            },
-            {
-                col = win_pos_left +
-                    (#M.metadata.json.categories) * (win_width + M.opts.window.horizontal_gap),
-                row = M.opts.window.vertical_gap
-            })
-
-        M.state.windows[ARCHIVE_KEY] = {}
-        M.state.windows[ARCHIVE_KEY].id = wid
-        M.state.windows[ARCHIVE_KEY].bufnr = bufnr
-
-        set_window_options(wid, M.opts)
-        set_buffer_options(bufnr)
-        disable_keys(bufnr, M.opts.disabled_keys)
-        set_mappings(bufnr, M.opts.mappings)
-        M.utils.set_keymap(bufnr, M.opts.mappings.archive_item,
-            ':lua require("quick-kanban").unarchive_item()<cr>')
-        M.utils.set_keymap(bufnr, M.opts.mappings.unarchive_item,
-            ':lua require("quick-kanban").unarchive_item()<cr>')
-
-        --M.state.windows[ARCHIVE_KEY].selected_line = M.state.windows[ARCHIVE_KEY].selected_line or 1
-        reload_buffer_for_category(ARCHIVE_KEY)
+        create_archive_window(win_width, win_height, win_pos_left)
     end
 
     set_category_focus(M.metadata.get_category_index(M.state.get_selected_category()) or 1)
@@ -806,18 +883,37 @@ end
 --- Toggle the visibility of the archive category
 M.toggle_archive_window = function()
     M.opts.show_archive = not M.opts.show_archive
-    if (M.opts.show_archive == false) and M.state.get_selected_category() == ARCHIVE_KEY then
+    if not M.opts.show_archive and M.state.get_selected_category() == ARCHIVE_KEY then
         M.state.selected_category = M.metadata.json.default_category
     end
-    M.close_ui()
-    M.open_ui()
+
+    local win_width, win_height, win_pos_left = relayout_windows()
+
+    if M.opts.show_archive then
+        create_archive_window(win_width, win_height, win_pos_left)
+    else
+        close_side_panel(ARCHIVE_KEY)
+    end
 end
 
---- Toggle the visibility of the preview category
+--- Toggle the visibility of the preview pane without rebuilding the entire UI
 M.toggle_preview_window = function()
     M.opts.show_preview = not M.opts.show_preview
-    M.close_ui()
-    M.open_ui()
+
+    local win_width, win_height, win_pos_left = relayout_windows()
+
+    if M.opts.show_preview then
+        create_preview_window(win_width, win_height, win_pos_left)
+        M.update_preview(nil, false)
+    else
+        close_side_panel(PREVIEW_KEY)
+    end
+
+    -- Restore focus to the active category window
+    local cur_wid = M.state.get_wid_for_category(M.state.get_selected_category())
+    if cur_wid then
+        vim.api.nvim_set_current_win(cur_wid)
+    end
 end
 
 --- Edit the attachment of the selected item directly in the preview window
@@ -832,10 +928,10 @@ M.edit_item = function()
         return
     end
 
-    if M.opts.show_preview == false then
+    if not M.opts.show_preview then
         M.opts.show_preview = true
-        M.close_ui()
-        M.open_ui()
+        local win_width, win_height, win_pos_left = relayout_windows()
+        create_preview_window(win_width, win_height, win_pos_left)
     end
 
     if item.attachment_path == nil then
@@ -870,23 +966,33 @@ M.end_editing = function()
     end
 end
 
---- Add a new category into Kanban
+--- Add a new category without rebuilding the entire UI
 --- @return boolean `true` if the category was added
 M.add_category = function()
     M.utils.show_cursor()
     local input = vim.fn.input('Add new category: ')
     if input == nil or input == '' or M.metadata.add_category(input) == false then
-        M.log.error("Failed to add category: " .. input)
+        M.log.error("Failed to add category: " .. (input or ""))
+        if M.opts.hide_cursor then M.utils.hide_cursor() end
         return false
     end
 
-    M.close_ui()
-    M.open_ui()
+    -- Initialize state entry for the new category (metadata already updated)
+    local new_index = #M.metadata.json.categories
+    M.state.windows[input] = { index = new_index, id = nil, bufnr = nil, selected_line = 1 }
+
+    -- Relayout existing windows with the new category count, then open the new column
+    local win_width, win_height, win_pos_left = relayout_windows()
+    create_column_window(input, new_index, win_width, win_height, win_pos_left)
+
+    if M.opts.hide_cursor then
+        M.utils.hide_cursor()
+    end
     M.log.debug("Category added: " .. input)
     return true
 end
 
---- Rename the current category
+--- Rename the current category in place (updates the window title only)
 --- @return boolean `true` if the category was renamed
 M.rename_category = function()
     local old_name = M.state.selected_category
@@ -898,6 +1004,7 @@ M.rename_category = function()
     M.utils.show_cursor()
     local new_name = vim.fn.input({ prompt = 'New name for category', default = old_name })
     if new_name == nil or new_name == '' then
+        if M.opts.hide_cursor then M.utils.hide_cursor() end
         return false
     end
 
@@ -910,14 +1017,24 @@ M.rename_category = function()
     M.database.handle_category_rename(old_name, new_name)
     M.state.handle_category_rename(old_name, new_name)
 
-    M.close_ui()
-    M.open_ui()
+    -- Update the window title in place; no layout change needed
+    local win = M.state.get_window(new_name)
+    if win and vim.api.nvim_win_is_valid(win.id or -1) then
+        vim.api.nvim_win_set_config(win.id, {
+            title = M.opts.window.title_decoration[1] .. new_name .. M.opts.window.title_decoration[2],
+            title_pos = 'center',
+        })
+    end
+
+    if M.opts.hide_cursor then
+        M.utils.hide_cursor()
+    end
 
     M.log.debug("Category renamed from " .. old_name .. " to " .. new_name)
     return true
 end
 
---- Delete the current category
+--- Delete the current category without rebuilding the entire UI
 M.delete_category = function()
     local category = M.state.selected_category
     if category == nil or category == ARCHIVE_KEY then
@@ -928,24 +1045,43 @@ M.delete_category = function()
     local confirm = vim.fn.confirm(
         'Permanently DELETE category [' .. category .. '] ? (This cannot be undone)',
         '&Yes\n&No', 2) == 1
-    if confirm then
-        --M.state.close_window(category)
-        M.close_ui()
-        if M.metadata.delete_category(category) == false then
-            M.log.error("Failed to delete category: " .. category)
-            return false
-        end
-
-        M.database.delete_all_items_in_category(category)
-        M.state.handle_category_deletion(category)
-        M.open_ui()
-
-        M.log.debug("Category deleted: " .. category)
-        return true
-    else
+    if not confirm then
         M.log.debug("Cancelled category deletion: " .. category)
         return false
     end
+
+    -- Close the column window before removing it from metadata/state
+    local win = M.state.get_window(category)
+    if win then
+        if vim.api.nvim_win_is_valid(win.id or -1) then
+            vim.api.nvim_win_close(win.id, true)
+        end
+        if vim.api.nvim_buf_is_valid(win.bufnr or -1) then
+            vim.api.nvim_buf_delete(win.bufnr, { force = true })
+        end
+    end
+
+    if M.metadata.delete_category(category) == false then
+        M.log.error("Failed to delete category: " .. category)
+        return false
+    end
+
+    M.database.delete_all_items_in_category(category)
+    M.state.handle_category_deletion(category)
+
+    -- Relayout remaining columns with the updated count
+    relayout_windows()
+
+    -- Move focus to the default or first remaining category
+    local new_category = M.metadata.json.default_category or M.metadata.json.categories[1]
+    if new_category then
+        M.state.selected_category = new_category
+        local new_index = M.metadata.get_category_index(new_category)
+        set_category_focus(new_index or 1)
+    end
+
+    M.log.debug("Category deleted: " .. category)
+    return true
 end
 
 return M

@@ -165,9 +165,14 @@ M.starts_with = function(str, start)
 end
 
 --- Open a popup window with the given contents
-M.open_popup_window = function(title, size, pos)
+--- @param title string
+--- @param size table {width, height}
+--- @param pos table {row, col}
+--- @param enter boolean? whether to focus the new window (default true)
+M.open_popup_window = function(title, size, pos, enter)
+    if enter == nil then enter = true end
     local bufnr = vim.api.nvim_create_buf(false, true)
-    local wid = vim.api.nvim_open_win(bufnr, true, {
+    local wid = vim.api.nvim_open_win(bufnr, enter, {
         relative = 'editor',
         width = size.width,
         height = size.height,
