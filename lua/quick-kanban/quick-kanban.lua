@@ -273,7 +273,7 @@ local get_help_text_lines = function(mappings)
     table.insert(lines, 2, "")
     table.insert(lines, "")
 
-    local copyright = "(c) 2024 Jussi Kallio"
+    local copyright = "(c) 2026 Jussi Kallio"
     copyright = M.utils.left_pad(copyright, center + #copyright / 2)
     table.insert(lines, copyright)
     return lines
@@ -348,6 +348,10 @@ local set_mappings = function(bufnr, mappings)
     M.utils.set_keymap(bufnr, mappings.prev_category, ':lua require("quick-kanban").prev_category()<cr>')
     M.utils.set_keymap(bufnr, mappings.next_item, ':lua require("quick-kanban").next_item()<cr>')
     M.utils.set_keymap(bufnr, mappings.prev_item, ':lua require("quick-kanban").prev_item()<cr>')
+    M.utils.set_keymap(bufnr, '<Right>', ':lua require("quick-kanban").next_category()<cr>')
+    M.utils.set_keymap(bufnr, '<Left>', ':lua require("quick-kanban").prev_category()<cr>')
+    M.utils.set_keymap(bufnr, '<Down>', ':lua require("quick-kanban").next_item()<cr>')
+    M.utils.set_keymap(bufnr, '<Up>', ':lua require("quick-kanban").prev_item()<cr>')
     M.utils.set_keymap(bufnr, mappings.open_item, ':lua require("quick-kanban").open_item()<cr>')
     M.utils.set_keymap(bufnr, mappings.select_item, ':lua require("quick-kanban").select_item()<cr>')
     M.utils.set_keymap(bufnr, mappings.rename_item, ':lua require("quick-kanban").rename_item()<cr>')
